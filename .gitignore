@@ -1,0 +1,98 @@
+# Node.js
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.Python
+venv/
+env/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+api/__pycache__/
+api/.pytest_cache/
+api/.venv/
+api/venv/
+api/lib/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ROS 2
+colcon_build/
+colcon_install/
+colcon_debug/
+build/
+install/
+log/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment Variables
+# Keep .env.example, .env.sample files in git (remove .gitignore for those if needed)
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+backend/.env.*.local
+Front-End-Book/.env.local
+Front-End-Book/.env.*.local
+
+# Sensitive Data & Credentials
+.api_keys
+*.key
+*.pem
+*.p8
+.aws/
+.ssh/
+.credentials
+credentials.json
+secrets.yml
+config.yml
+.token
+.tokens
+
+# Docusaurus
+Front-End-Book/.docusaurus/
+Front-End-Book/build/
+
+# Temporary
+*.tmp
+*.temp
+*.bak
+
+# OS Files
+.DS_Store
+.AppleDouble
+.LSOverride
+.windows
+Thumbs.db
+desktop.ini
+
+# Keep These in Git (Remove from .gitignore if needed)
+# !.env.example
+# !.env.sample
+# !.env.local.example
+# !backend/.env.example

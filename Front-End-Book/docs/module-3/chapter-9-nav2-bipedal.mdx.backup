@@ -1,0 +1,884 @@
+---
+title: Chapter 9 - Nav2 Path Planning for Bipedal Humanoids
+sidebar_label: Chapter 9 Nav2
+sidebar_position: 3
+---
+
+# Chapter 9: Nav2 - Path Planning for Bipedal Humanoids
+
+## Learning Objectives
+
+After completing this chapter, students will be able to:
+
+1. **Configure Nav2 stack** for bipedal humanoid robots
+2. **Design bipedal costmaps** with humanoid-specific constraints
+3. **Implement global and local path planning** for collision avoidance
+4. **Integrate footstep planning** with balance constraints
+5. **Validate sim-to-real transfer** of navigation behaviors
+6. **Document and execute** hardware safety protocols
+
+## Overview
+
+Nav2 (Navigation 2) is ROS 2's standard navigation stack. In this chapter, you'll extend Nav2 for bipedal robots:
+
+- Costmap configuration with foot-sized inflation radius
+- Global planning (SMAC planner for footstep lattice)
+- Local planning (DWB controller for smooth motion)
+- Balance and stability constraints
+- Sim-to-real transfer and hardware safety
+
+## Prerequisites
+
+- Completion of Chapter 7 (Isaac Sim) and Chapter 8 (Isaac ROS)
+- Understanding of ROS 2 Nav2 stack basics
+- Knowledge of costmaps, planners, and controllers
+
+---
+
+## 1. Nav2 Stack Overview
+
+### 1.1 What is Nav2?
+
+**Nav2** (Navigation 2) is ROS 2's standard navigation stack, providing planners, controllers, and safety mechanisms for autonomous mobile robots. For bipedal humanoids, Nav2 requires specialized configuration:
+
+- **Costmap layers**: Adapt inflation radius to foot geometry
+- **Global planner**: SMAC planner with footstep lattice support
+- **Local planner**: DWB (Dynamic Window Broker) controller for smooth motion
+- **Behavior tree**: Safety checks, recovery actions, and feedback loops
+- **Humanoid extensions**: Balance constraints, stability validation, swing phase clearance
+
+### 1.2 Humanoid-Specific Architecture
+
+Nav2 for bipedal robots extends standard wheeled robot navigation:
+
+```
+Humanoid Nav2 Stack
+├─ Costmap Server (layered)
+│  ├─ Static layer (map data)
+│  ├─ Inflation layer (humanoid margin: 0.3m)
+│  ├─ Collision layer (sensor data)
+│  └─ Gravity layer (slope penalties)
+├─ Global Planner (SMAC)
+│  └─ Footstep lattice (A* with step validation)
+├─ Local Planner (DWB)
+│  ├─ Trajectory generation
+│  ├─ Balance constraint check
+│  └─ Swing phase validation
+├─ Behavior Tree
+│  ├─ Initial pose estimation
+│  ├─ Path following with recovery
+│  └─ Safety monitors (IMU, contact sensors)
+└─ Safety Layer
+   ├─ Emergency stop protocol
+   ├─ Center-of-mass monitoring
+   └─ Sensor-based fall detection
+```
+
+### 1.3 Nav2 Package Ecosystem
+
+| Package | Function | Role |
+|---------|----------|------|
+| **nav2_costmap_2d** | Costmap management | Layer aggregation, inflation |
+| **nav2_smac_planner** | Global planner | Footstep lattice A* search |
+| **nav2_dwb_controller** | Local planner | Real-time trajectory commands |
+| **nav2_behavior_tree** | Behavior coordination | Task sequencing and recovery |
+| **nav2_recoveries** | Recovery actions | Stuck handling, replanning |
+| **nav2_util** | Lifecycle management | Node initialization and cleanup |
+
+---
+
+## 2. Bipedal Costmaps
+
+### 2.1 Footprint Geometry
+
+Bipedal robots have **two foot-shaped collision models**:
+
+```
+Left Foot:        Right Foot:
+┌─────────┐       ┌─────────┐
+│         │       │         │
+│ 0.25m   │ 0.1m  │ 0.25m   │ 0.1m
+│         │       │         │
+└─────────┘       └─────────┘
+   stride
+  <-------->
+   0.3-0.8m
+```
+
+**Footprint parameters**:
+- **Foot length**: 0.25m (x-axis)
+- **Foot width**: 0.10m (y-axis)
+- **Base footprint**: Union of both feet (0.25m × 0.20m effective)
+- **Stride range**: 0.3m (conservative) to 0.8m (fast walking)
+- **Step width**: 0.15-0.20m (balance requirement)
+
+### 2.2 Inflation Strategy for Humanoids
+
+Unlike wheeled robots (circular inflation), humanoids require **rectangular inflation**:
+
+```
+Original foot footprint:     Inflated with humanoid margin:
+┌─────────┐                 ┌──────────────┐
+│ F │     │                 │   F          │
+│───┤     │                 │──────────────┤
+│   │ R   │                 │      R       │
+└─────────┘                 └──────────────┘
+  0.25×0.1m                 0.55×0.40m (0.15m margin)
+```
+
+**Inflation parameters**:
+- **Inflation radius**: 0.15-0.20m (humanoid body stability margin)
+- **Cost function**: Linear scaling from obstacle to inflated boundary
+- **Cost decay**: Exponential (aggressive near obstacles)
+- **Maximum cost**: 254 (collision boundary)
+- **Lethal cost**: 253 (guaranteed collision)
+
+### 2.3 Costmap Layers Configuration
+
+```yaml
+# costmap_2d.yaml
+plugins:
+  - name: "static_layer"
+    type: "nav2_costmap_2d::StaticLayer"
+    map_subscribe_transient_local: true
+
+  - name: "collision_layer"
+    type: "nav2_costmap_2d::ObstacleLayer"
+    observation_sources: [scan, camera]
+    scan:
+      source: scan
+      min_obstacle_height: 0.05
+      max_obstacle_height: 2.0
+
+  - name: "inflation_layer"
+    type: "nav2_costmap_2d::InflationLayer"
+    inflation_radius: 0.20
+    cost_scaling_factor: 10.0
+
+  - name: "gravity_layer"
+    type: "humanoid_nav2::GravityLayer"
+    slope_penalty_factor: 5.0
+    max_slope: 0.15  # 8.5 degrees
+
+costmap:
+  footprint_padding: 0.10
+  robot_radius: 0.15
+  plugins: ["static_layer", "collision_layer", "inflation_layer", "gravity_layer"]
+  update_frequency: 10.0
+  publish_frequency: 1.0
+```
+
+### 2.4 Static vs. Dynamic Obstacles
+
+**Static obstacles** (walls, furniture):
+- Loaded from occupancy grid map
+- Updated infrequently (once per map)
+- Provide stable planning environment
+
+**Dynamic obstacles** (people, moving objects):
+- Detected from sensor data (LiDAR, RGB-D camera)
+- Updated at sensor frequency (10-30 Hz)
+- Include temporal filtering to reduce noise
+
+**Gravity/slope layer** (custom for humanoids):
+- Penalize steep slopes (>8.5° = 0.15 grade)
+- Avoid ice/slippery surfaces (coefficient of friction data)
+- Model energy cost of uphill walking
+
+---
+
+## 3. Path Planning: Global & Local
+
+### 3.1 Global Planning with SMAC
+
+**State Lattice Planner (SMAC)** generates footstep-aware global paths:
+
+**Footstep lattice model**:
+```python
+# Predefined step actions
+STEP_ACTIONS = [
+    (0.30, 0.00),   # Step forward (conservative)
+    (0.50, 0.00),   # Step forward (normal)
+    (0.70, 0.00),   # Step forward (fast)
+    (0.30, 0.15),   # Step forward-left
+    (0.30, -0.15),  # Step forward-right
+    (0.00, 0.20),   # Step left
+    (0.00, -0.20),  # Step right
+    (-0.30, 0.00),  # Step backward
+]
+```
+
+**Heuristic cost model**:
+- **Distance cost**: Euclidean distance to goal (primary)
+- **Direction cost**: Penalize actions away from goal
+- **Stability cost**: Penalize unstable step sequences
+- **Energy cost**: Prefer efficient stride lengths
+
+**Footstep validation** (each action checked):
+```
+For each step candidate:
+  1. Check collision? (footstep footprint vs. costmap)
+  2. Check balance? (center-of-mass within support polygon)
+  3. Check clearance? (swing foot > 0.05m above ground)
+  4. Check stability? (transition smooth, no tipping risk)
+  → If all pass, add to frontier; else prune
+```
+
+### 3.2 Local Planning with DWB
+
+**Dynamic Window Broker (DWB)** generates real-time motion commands:
+
+**Trajectory generation**:
+```
+Current state: (x, y, theta, v_x, v_y, omega)
+  ↓
+Generate candidate trajectories
+  (sample v_x, v_y, omega from feasible window)
+  ↓
+Score each trajectory:
+  - Obstacle distance
+  - Path alignment (heading toward local goal)
+  - Velocity alignment (smooth acceleration)
+  ↓
+Select trajectory with highest score
+  ↓
+Output twist command (v_x, v_y, omega)
+```
+
+**Balance constraint check** (added for humanoids):
+```python
+def check_balance_constraint(x, y, theta, footstep_sequence):
+    """Validate center-of-mass stays in support polygon."""
+    for step in footstep_sequence:
+        com_x, com_y = compute_com(step, theta)
+        support_polygon = compute_support_polygon(step)
+        if not point_in_polygon(com_x, com_y, support_polygon):
+            return False
+    return True
+```
+
+**Swing phase validation**:
+- Ensure swing foot clears ground (0.05m minimum)
+- Validate landing footstep has stable support
+- Monitor IMU for unexpected acceleration (fall detection)
+
+### 3.3 Stride Parameters
+
+| Parameter | Conservative | Normal | Fast |
+|-----------|--------------|--------|------|
+| Forward stride | 0.30m | 0.50m | 0.70m |
+| Step width | 0.10m | 0.15m | 0.20m |
+| Step frequency | 1.0 Hz | 1.5 Hz | 2.0 Hz |
+| Walking speed | 0.30 m/s | 0.75 m/s | 1.4 m/s |
+
+---
+
+## 4. Stability & Safety Constraints
+
+### 4.1 Center-of-Mass Constraints
+
+**Support polygon** (feet define stability region):
+
+```
+Left foot  Right foot
+  ┌──┐      ┌──┐
+  │  │      │  │
+  └──┘      └──┘
+
+Support polygon = convex hull of 4 corners
+(union of both foot corners)
+```
+
+**Balance condition**: Center-of-mass (COM) must remain inside support polygon during swing and stance phases.
+
+**COM dynamics model**:
+```
+COM height: ~0.55m (humanoid standard)
+COM offset from base: (0.0m, 0.0m) if centered
+Double support: COM between both feet
+Single support: COM over stance foot
+```
+
+### 4.2 Swing Phase Clearance
+
+**Minimum clearance requirement**: 0.05m (safety margin)
+
+```
+Swing phase trajectory:
+  Initial contact → Mid-swing (peak height) → Final contact
+       ↓                    ↓                      ↓
+    0.0m              ~0.10m above ground     0.0m
+```
+
+**Monitoring during execution**:
+- Use forward/backward foot sensors to detect contact
+- Use IMU to measure acceleration patterns
+- Abort swing if ground contact detected unexpectedly
+
+### 4.3 Emergency Stop Protocol
+
+**E-Stop triggers**:
+1. User input (wireless remote, software signal)
+2. IMU acceleration exceeds threshold (fall detection)
+3. Contact sensor anomaly (unexpected ground contact)
+4. Battery critical (<5% charge)
+5. Thermal overheat (motor/joint temperature)
+
+**E-Stop action**:
+```
+1. Halt all motion commands (v=0, omega=0)
+2. Engage all motor brakes (if available)
+3. Lower COM gradually (crouch pose)
+4. Signal safety relay (hardware cutoff)
+5. Log incident (timestamp, sensor readings, state)
+```
+
+### 4.4 Hardware Safety Checklist
+
+Before physical deployment:
+
+- **Mechanical**:
+  - ✅ All joints move freely (no binding)
+  - ✅ Actuator limits programmed (-30° to +120° for knee, etc.)
+  - ✅ Foot sensors calibrated (contact threshold tuned)
+  - ✅ Brake systems tested (can stop mid-stride)
+
+- **Electrical**:
+  - ✅ Battery voltage acceptable (8.4V ≤ V ≤ 10.2V for 2S LiPo)
+  - ✅ Motor controller firmware updated
+  - ✅ IMU calibrated (zero-g offset, rotation matrix)
+  - ✅ Wireless controller paired and tested
+
+- **Software**:
+  - ✅ ROS 2 nodes start without error
+  - ✅ Nav2 costmap loads map file correctly
+  - ✅ VSLAM initializes and tracks features
+  - ✅ E-stop service responds (<50ms latency)
+  - ✅ Log files writable and monitored
+
+- **Operational**:
+  - ✅ Operator trained on E-stop and manual recovery
+  - ✅ Safety perimeter established (foam barriers, mat)
+  - ✅ Spotters assigned (at least 2 people)
+  - ✅ Medical kit available
+  - ✅ Incident response plan documented
+
+---
+
+## 5. Sim-to-Real Transfer
+
+### 5.1 Parameter Mapping
+
+Transfer parameters from Isaac Sim to physical hardware:
+
+**Environment parameters**:
+- **Gravity**: 9.81 m/s² (both sim and real)
+- **Ground friction**: μ = 0.7 (typical indoor floor)
+- **Map resolution**: 0.05m (grid cell size)
+
+**Robot parameters**:
+- **Foot dimensions**: 0.25m × 0.10m (measure physically)
+- **COM height**: 0.55m (measure from feet to COM when standing)
+- **Inertia tensor**: Calculate from CAD or measure via swing test
+- **Motor torque limits**: Peak vs. continuous (from datasheet)
+
+**Planner parameters**:
+- **Inflation radius**: 0.15-0.20m (sim) → 0.20-0.25m (real) [5cm safety buffer]
+- **Max slope**: 0.15 (8.5°) on flat terrain → 0.10 (5.7°) with carpet
+- **Stride range**: 0.3-0.8m (both), but start conservatively on real hardware
+
+### 5.2 Validation Protocols
+
+**Phase 1: Simulation Validation** (in Isaac Sim)
+1. Load realistic physics parameters
+2. Add sensor noise (camera blur, IMU drift)
+3. Run pathfinding 100 times, log success rate
+4. Validate VSLAM accuracy against ground truth
+5. Benchmark perception latency
+
+**Phase 2: Hardware Bringup** (in lab)
+1. Calibrate feet sensors (touch/no-touch threshold)
+2. Run E-stop test (should stop within 200ms)
+3. Validate IMU (compare with gravity vector)
+4. Test wireless communication latency (<100ms)
+5. Static balance test (stand without motion control)
+
+**Phase 3: Locomotion Testing** (in controlled area)
+1. Forward walking in straight line (5m)
+2. Turning (90° left/right, measure accuracy)
+3. Obstacle avoidance (stationary cone, >0.5m distance)
+4. Slope walking (5° ramp, measure stability)
+5. Recovery from stumble (small perturbation, should not fall)
+
+**Phase 4: Navigation Testing** (in office environment)
+1. VSLAM initialization and tracking (>10 features/frame)
+2. Autonomous navigation to waypoint (>0.5m accuracy)
+3. Dynamic obstacle avoidance (moving person at 1 m/s)
+4. Replanning during navigation (unexpected obstacle)
+5. Error recovery (sensor loss, timeout handling)
+
+### 5.3 Failure Modes & Recovery
+
+| Failure Mode | Signature | Recovery |
+|--------------|-----------|----------|
+| **Loss of VSLAM tracking** | /odometry publishing stale | Trigger relocalization, or E-stop |
+| **Costmap update lag** | Stale occupancy grid (>1s old) | Pause nav, wait for refresh |
+| **Contact sensor failure** | No foot-ground transitions detected | Fall detection via IMU only |
+| **Motor saturation** | Command velocity != achieved velocity | Reduce target speed by 20% |
+| **Thermal shutdown** | Motor current spike, temperature warning | Halt, cool for 30s, retry |
+| **Wireless dropout** | ROS 2 heartbeat timeout (>5s) | E-stop trigger (autonomous safety fallback) |
+
+### 5.4 Checkpoints & Milestones
+
+**Checkpoint 1: Successful straight-line walking**
+- ✅ No falls in 10 trials
+- ✅ Stride consistency (error <0.05m)
+- ✅ Energy consumption within model
+
+**Checkpoint 2: Robust obstacle avoidance**
+- ✅ No collisions in 20 dynamic scenarios
+- ✅ VSLAM tracking maintained (>0.95 uptime)
+- ✅ Recovery from navigation failures (<2s)
+
+**Checkpoint 3: Production deployment ready**
+- ✅ 1 hour continuous operation without incident
+- ✅ Handoff from sim to real with <5% performance loss
+- ✅ All safety protocols verified and documented
+
+---
+
+## 6. Advanced Topics & Extensions
+
+### 6.1 Terrain-Aware Navigation
+
+Bipedal robots can navigate on different terrain types with adapted parameters:
+
+**Terrain Cost Model**:
+
+| Terrain | Friction | Stability | Stride Reduction | Energy Cost |
+|---------|----------|-----------|------------------|-------------|
+| Carpet | 0.5 | 0.8 | -10% | +15% |
+| Concrete | 0.7 | 1.0 | 0% | 0% |
+| Vinyl (slippery) | 0.3 | 0.6 | -20% | +25% |
+| Gravel | 0.4 | 0.7 | -15% | +30% |
+| Grass | 0.6 | 0.8 | -10% | +20% |
+| Sand | 0.2 | 0.5 | -30% | +50% |
+| Stairs (up) | 0.8 | 0.6 | -25% | +100% |
+| Stairs (down) | 0.8 | 0.5 | -30% | +60% |
+
+**Terrain Classifier Node**:
+
+```python
+class TerrainClassifier(Node):
+    """Classify ground terrain from IMU and pressure sensors."""
+
+    def __init__(self):
+        super().__init__('terrain_classifier')
+
+        # Sensors
+        self.imu_sub = self.create_subscription(Imu, '/imu/data', self.imu_callback, 10)
+        self.pressure_sub = self.create_subscription(
+            Float32MultiArray, '/pressure_sensors/feet', self.pressure_callback, 10
+        )
+
+        # Classifier model
+        self.terrain_pub = self.create_publisher(String, '/terrain/type', 10)
+
+    def classify_from_vibration(self, imu_accel: np.ndarray) -> str:
+        """Classify terrain from vibration signature."""
+        # Compute FFT of acceleration
+        fft = np.abs(np.fft.fft(imu_accel))
+        freqs = np.fft.fftfreq(len(imu_accel), 0.01)
+
+        # Grass: high frequency content (>50 Hz)
+        # Carpet: medium frequency (20-50 Hz)
+        # Concrete: low frequency (<20 Hz)
+        # Gravel: broad frequency spectrum
+
+        dominant_freq = freqs[np.argmax(fft)]
+        energy_ratio = fft[:50].sum() / fft.sum()
+
+        if dominant_freq > 50:
+            return 'grass'
+        elif dominant_freq > 20:
+            return 'carpet'
+        elif energy_ratio < 0.3:
+            return 'gravel'
+        else:
+            return 'concrete'
+
+    def classify_from_pressure(self, pressure_left: float,
+                              pressure_right: float) -> str:
+        """Classify from foot pressure distribution."""
+        diff = abs(pressure_left - pressure_right)
+
+        if diff > 20:  # Uneven pressure
+            return 'gravel'
+        elif pressure_left < 5 or pressure_right < 5:
+            return 'sand'  # Sinking
+        else:
+            return 'concrete'
+```
+
+### 6.2 Multi-Floor Navigation
+
+**Handling elevators and stairs:**
+
+```python
+class ElevatorNavigator(Node):
+    """Navigate to and use elevators."""
+
+    def __init__(self):
+        super().__init__('elevator_navigator')
+        self.in_elevator = False
+        self.target_floor = 0
+
+    def navigate_to_elevator(self, floor: int):
+        """Navigate to nearest elevator for target floor."""
+        # Use map with elevator locations
+        elevator = self.find_nearest_elevator(floor)
+        self.navigate_to_waypoint(elevator)
+
+    def enter_elevator(self):
+        """Open door and enter elevator."""
+        # 1. Request elevator
+        self.call_elevator_button()
+
+        # 2. Wait for door to open (timeout 30s)
+        if not self.wait_for_door_open(timeout=30):
+            self.request_human_assistance()
+            return False
+
+        # 3. Walk into elevator
+        self.walk_forward(distance=1.0)
+
+        # 4. Face door
+        self.face_direction(180)  # Face outward
+
+        self.in_elevator = True
+        return True
+
+    def exit_elevator(self):
+        """Exit elevator when door opens."""
+        self.walk_forward(distance=1.0)
+        self.in_elevator = False
+        return True
+
+    def navigate_stairs(self, direction: str = 'up', count: int = 1):
+        """Navigate stairs (simplified for bipeds)."""
+        for stair in range(count):
+            if direction == 'up':
+                # Place feet on each stair, powered by legs
+                self.step_height = 0.18  # Typical step height
+                self.step_stride = 0.25
+            else:
+                # Descend carefully (slower)
+                self.step_height = 0.18
+                self.step_stride = 0.15  # Shorter steps going down
+                self.balance_margin *= 2  # More conservative
+
+            self.execute_stair_step()
+```
+
+### 6.3 Failure Recovery & Resilience
+
+**Recovery behaviors when things go wrong:**
+
+```python
+class RobustNavigationController:
+    """Navigate reliably despite partial failures."""
+
+    def __init__(self):
+        self.localization_lost_count = 0
+        self.max_relocalizations = 3
+        self.sensor_failure_mode = None
+
+    def handle_localization_loss(self):
+        """Recover from VSLAM tracking loss."""
+        self.get_logger().warn("Localization lost!")
+
+        # Stage 1: Rotate to find features (30 seconds)
+        if not self.rotate_and_relocalize(timeout=30):
+            # Stage 2: Move to feature-rich area
+            self.navigate_to_landmark()
+            if not self.rotate_and_relocalize(timeout=30):
+                # Stage 3: Request assistance
+                self.request_human_help("Cannot relocalize VSLAM")
+                return False
+
+        return True
+
+    def handle_sensor_failure(self, sensor: str):
+        """Gracefully handle sensor loss."""
+        self.sensor_failure_mode = sensor
+        self.get_logger().error(f"Sensor {sensor} failed!")
+
+        if sensor == 'camera':
+            # Fall back to LiDAR odometry
+            self.max_speed *= 0.5
+            self.use_lidar_only_navigation()
+
+        elif sensor == 'lidar':
+            # Use contact sensors + IMU
+            self.max_speed *= 0.3
+            self.use_haptic_navigation()
+
+        elif sensor == 'imu':
+            # Degrade balance safety
+            self.balance_margin *= 2
+            self.max_slope = 0.05  # Conservative
+
+        elif sensor == 'motor':
+            # Limp to safety
+            self.goto_safe_location()
+
+        return True
+
+    def compensate_for_missing_sensor(self, sensor: str):
+        """Adjust planning when sensor is unavailable."""
+        if sensor == 'camera':
+            # Increase costmap inflation (less precise obstacle detection)
+            self.costmap.inflation_radius = 0.3
+            # More frequent sensor scans needed
+            self.lidar_frequency = 20  # Hz
+
+        elif sensor == 'lidar':
+            # Reduce speed to give camera more reaction time
+            self.max_forward_speed = 0.3
+            # Rely on depth camera
+            self.depth_frequency = 30  # Hz
+
+    def estimate_navigation_confidence(self) -> float:
+        """Rate confidence in current navigation (0-1)."""
+        confidence = 1.0
+
+        # Localization quality
+        if self.localization_uncertainty > 0.2:
+            confidence *= 0.7
+
+        # Sensor health
+        for sensor, is_healthy in self.sensor_status.items():
+            if not is_healthy:
+                confidence *= 0.8
+
+        # Recent failures
+        confidence *= 0.95 ** self.localization_lost_count
+
+        return confidence
+```
+
+### 6.4 Performance Optimization
+
+**Achieving real-time navigation at scale:**
+
+```python
+def optimize_nav2_performance():
+    """Configuration for real-time performance."""
+    return {
+        'global_costmap': {
+            'plugins': ['static_layer', 'inflation_layer'],  # Minimal layers
+            'update_frequency': 5.0,  # 5 Hz (not 10 Hz)
+            'publish_frequency': 2.0,  # Lazy publishing
+            'footprint_padding': 0.05,  # Minimal inflation radius
+            'inflation_radius': 0.20,  # Humanoid-specific
+        },
+
+        'local_costmap': {
+            'plugins': ['obstacle_layer', 'inflation_layer'],
+            'update_frequency': 10.0,  # Higher local frequency
+            'obstacle_layer': {
+                'max_obstacle_height': 2.0,
+                'min_obstacle_height': 0.05,
+            },
+        },
+
+        'global_planner': {
+            'allow_unknown': False,
+            'max_iterations': 500000,  # Reasonable limit
+            'max_planning_time': 2.0,  # 2 second timeout
+            'analytic_expansion_ratio': 3.5,  # Fast expansion heuristic
+        },
+
+        'local_controller': {
+            'sim_time': 1.5,  # Look ahead 1.5 seconds
+            'linear_granularity': 0.05,
+            'angular_granularity': 0.025,
+            'vx_samples': 20,  # Fewer samples = faster
+            'vtheta_samples': 20,
+        },
+
+        'recovery_behaviors': [],  # Disable or minimize
+    }
+```
+
+### 6.5 Integration with Vision-Language Models
+
+**Preparing for Module 4 (Vision-Language Actions):**
+
+```python
+class VisionLanguageIntegration(Node):
+    """Bridge Nav2 navigation with vision-language instructions."""
+
+    def __init__(self):
+        super().__init__('vision_language_bridge')
+
+        # Publisher for high-level goals
+        self.goal_pub = self.create_publisher(GoalMsg, '/goal', 10)
+
+        # Subscriber for natural language commands
+        self.language_sub = self.create_subscription(
+            String,
+            '/instruction',
+            self.instruction_callback,
+            10
+        )
+
+    def instruction_callback(self, msg: String):
+        """Convert natural language to navigation goal."""
+        instruction = msg.data
+
+        # Examples:
+        # "Go to the conference room" → navigate to known location
+        # "Find a person wearing a red shirt" → search behavior
+        # "Follow that person" → tracking behavior
+        # "Go upstairs" → multi-floor navigation
+
+        if 'go to' in instruction.lower():
+            location = self.parse_location(instruction)
+            self.navigate_to_location(location)
+
+        elif 'find' in instruction.lower():
+            target = self.parse_target(instruction)
+            self.search_and_find(target)
+
+        elif 'follow' in instruction.lower():
+            person = self.identify_person(instruction)
+            self.follow_person(person)
+```
+
+---
+
+## Summary
+
+This chapter covered complete autonomous navigation for bipedal humanoids:
+
+| Topic | Key Takeaway |
+|-------|-------------|
+| **Nav2 Stack** | Industry-standard, extensible navigation framework |
+| **Costmaps** | Humanoid-specific layers (inflation, gravity) |
+| **Planning** | Footstep lattice for bipedal constraints |
+| **Safety** | Multiple layers (hardware, software, operational) |
+| **Deployment** | 4-phase validation protocol (sim→lab→controlled→open) |
+| **Resilience** | Recovery behaviors, sensor fusion, graceful degradation |
+| **Terrain** | Adaptation for different surfaces |
+| **Vision-Language** | Preparation for higher-level intelligence |
+
+---
+
+## Key Takeaways
+
+1. **Bipedal navigation is specialized** - Not just scaled-down wheeled robots
+2. **Nav2 is extensible** - Custom costmap layers, planners, behaviors
+3. **Safety is paramount** - Hardware + software + operational checks
+4. **Validate in phases** - Simulation first, then incremental hardware testing
+5. **Failures happen** - Design for recovery, not perfection
+6. **Terrain matters** - Adapt parameters for different surfaces
+7. **Integration is key** - Perception (Ch8) → Navigation (Ch9) → Vision-Language (Ch10+)
+
+---
+
+## Next Steps
+
+1. Complete Exercise 9.1: Build footstep path planner with constraints
+2. Complete Exercise 9.2: Validate sim-to-real transfer protocol
+3. Deploy on real humanoid robot (follow safety checklist exactly)
+4. Monitor and log all navigation events
+5. Move to Module 4: Vision-Language Actions for autonomous decision-making
+
+---
+
+## Glossary
+
+- **Nav2**: ROS 2 navigation stack with planners, controllers, and behavior trees
+- **Costmap**: 2D grid encoding obstacle costs for planning
+- **Footstep Lattice**: Discrete footstep positions for humanoid path planning
+- **Balance Constraint**: Requirement that center-of-mass stays within support polygon
+- **Center of Mass**: Point where robot's mass is concentrated (hip height for humanoids)
+- **Bipedal Locomotion**: Walking on two legs with alternating support phases
+- **SMAC Planner**: State Lattice planner for discrete motion primitives
+- **DWB Controller**: Dynamic Window Broker local planner for real-time control
+
+---
+
+## References
+
+1. Macenski, S., et al. "Navigation 2: Current state and future research direction." 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS). IEEE, 2021.
+
+2. Kajita, S., et al. "The 3D linear inverted pendulum model for biped walking." 2003 IEEE International Conference on Robotics and Automation.
+
+3. Chestnutt, J., et al. "Planning and execution of dynamic whole-body locomotion for a humanoid robot." 2009 IEEE International Conference on Robotics and Automation.
+
+---
+
+## Examples
+
+### Example 9.1: Nav2 Stack Setup
+
+[See: static/examples/module-3/chapter-9/example-9.1-nav2-setup.launch.py]
+
+Launch Nav2 configured for bipedal humanoids.
+
+### Example 9.2: Bipedal Costmap
+
+[See: static/examples/module-3/chapter-9/example-9.2-bipedal-costmap.yaml]
+
+Configure costmap layers for humanoid-specific constraints.
+
+### Example 9.3: Global Path Planning
+
+[See: static/examples/module-3/chapter-9/example-9.3-global-planning.py]
+
+Generate global footstep paths to goal.
+
+### Example 9.4: Local Path Planning
+
+[See: static/examples/module-3/chapter-9/example-9.4-local-planning.py]
+
+Real-time obstacle avoidance for immediate motion commands.
+
+### Example 9.5: Obstacle Avoidance & Footstep Planning
+
+[See: static/examples/module-3/chapter-9/example-9.5-obstacle-avoidance.py]
+
+Integrated footstep planning with collision checking.
+
+### Example 9.6: Sim-to-Real Transfer & Safety
+
+[See: static/examples/module-3/chapter-9/example-9.6-sim-to-real-transfer.md]
+
+Protocol for validating navigation on physical hardware.
+
+## Exercises
+
+### Exercise 9.1: Bipedal Path Planning with Constraints
+
+Generate collision-free footstep paths respecting balance limits.
+
+[See: static/exercises/module-3/chapter-9/9.ex1-bipedal-planning/]
+
+### Exercise 9.2: Sim-to-Real Validation Protocol
+
+Document parameter transfer and validate on hardware (or simulation).
+
+[See: static/exercises/module-3/chapter-9/9.ex2-sim-to-real-validation/]
+
+## Summary
+
+In this chapter, you've learned:
+
+- How to configure Nav2 for bipedal humanoid constraints
+- How to design costmaps with footstep-aware inflation
+- How to integrate footstep planning with collision checking
+- How to validate navigation behaviors for real hardware
+
+**Module 3 Complete!** You now have the foundation for Module 4 (Vision-Language Actions) and real-world robot deployment.

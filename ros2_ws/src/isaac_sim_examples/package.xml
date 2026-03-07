@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>isaac_sim_examples</name>
+  <version>0.0.1</version>
+  <description>Module 3 Chapter 7: Isaac Sim Examples</description>
+  <maintainer email="robotics@example.com">Robotics Team</maintainer>
+  <license>BSD-3-Clause</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>python3-distutils</exec_depend>
+</package>

@@ -1,0 +1,716 @@
+openapi: 3.0.3
+info:
+  title: RAG Chatbot API
+  description: |
+    Production-ready API for RAG-powered chatbot serving the Physical AI textbook.
+    Provides streaming chat, conversation history, and content ingestion endpoints.
+  version: 1.0.0
+  contact:
+    name: Physical AI Team
+  license:
+    name: MIT
+
+servers:
+  - url: https://api.example.com/v1
+    description: Production
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Verify API and dependencies are operational
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service unavailable (dependency down)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /chat:
+    post:
+      summary: Submit query and receive streaming response
+      description: |
+        Submit a user query (optionally with selected text context) and receive
+        a streaming SSE response with grounded answer, citations, and metadata.
+        Supports multi-turn conversations via conversation_id.
+      operationId: streamChat
+      tags:
+        - Chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Streaming response (Server-Sent Events)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  Stream of events in SSE format. Each event is JSON-encoded.
+                  Event types: thinking, retrieval, response_start, text_delta, citation, response_end
+              example: |
+                data: {"type": "thinking", "delta": "Searching textbook..."}
+
+                data: {"type": "retrieval", "chunks": [{"chapter": 8, "section": "..."}]}
+
+                data: {"type": "response_start", "timestamp": "2026-01-27T10:00:00Z"}
+
+                data: {"type": "text_delta", "delta": "Bipedal locomotion is..."}
+
+                data: {"type": "citation", "ieee": "[1] Chapter 8, Section 2"}
+
+                data: {"type": "response_end", "confidence": 0.92}
+        '400':
+          description: Invalid request (empty query, too long, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '408':
+          description: Request timeout (vector search or LLM generation exceeded limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited (user or OpenAI quota exceeded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service unavailable (Qdrant, OpenAI, or Postgres down)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /conversations:
+    get:
+      summary: List user's conversations
+      description: Retrieve paginated list of user's recent conversations
+      operationId: listConversations
+      tags:
+        - Conversations
+      parameters:
+        - name: limit
+          in: query
+          description: Number of conversations to return (default 10)
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of conversations to skip (for pagination)
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+        '401':
+          description: Unauthorized (missing or invalid user context)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /conversations/{conversation_id}:
+    get:
+      summary: Get conversation history
+      description: Retrieve full message history for a specific conversation
+      operationId: getConversation
+      tags:
+        - Conversations
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          description: UUID of the conversation
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Conversation with full message history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '404':
+          description: Conversation not found or unauthorized access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete conversation
+      description: |
+        Delete a conversation and all associated messages (user privacy/data deletion).
+        Only the conversation owner can delete.
+      operationId: deleteConversation
+      tags:
+        - Conversations
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          description: UUID of the conversation
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Conversation deleted successfully
+        '403':
+          description: Forbidden (not conversation owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ingest:
+    post:
+      summary: Trigger content ingestion
+      description: |
+        Admin-only endpoint to ingest/re-ingest textbook chapters into vector database.
+        Submits batch job to OpenAI Batch API and returns job ID for monitoring.
+      operationId: ingestContent
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRequest'
+      responses:
+        '202':
+          description: Batch job submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+        '400':
+          description: Invalid chapters or parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (not admin)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service unavailable (OpenAI Batch API down)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    ChatRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: User's question or statement
+          minLength: 1
+          maxLength: 2000
+          example: "What is bipedal locomotion?"
+        conversation_id:
+          type: string
+          format: uuid
+          description: |
+            Optional. If provided, appends to existing conversation.
+            If null, creates new conversation.
+          nullable: true
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        selected_text:
+          type: string
+          description: |
+            Optional. User-selected text from textbook.
+            If provided, used as context instead of vector search.
+          nullable: true
+          example: "Bipedal locomotion refers to movement using two legs..."
+        system_context:
+          type: string
+          description: |
+            Optional. Additional context (module name, difficulty level, etc.)
+            for response generation.
+          nullable: true
+          example: "Module 3: Advanced Perception"
+
+    ChatStreamEvent:
+      oneOf:
+        - type: object
+          required:
+            - type
+            - delta
+          properties:
+            type:
+              type: string
+              enum: [thinking]
+              example: thinking
+            delta:
+              type: string
+              description: Thinking/reasoning step
+              example: "Searching textbook for relevant sections..."
+
+        - type: object
+          required:
+            - type
+            - chunks
+          properties:
+            type:
+              type: string
+              enum: [retrieval]
+              example: retrieval
+            chunks:
+              type: array
+              description: Retrieved textbook chunks
+              items:
+                $ref: '#/components/schemas/TextbookChunk'
+
+        - type: object
+          required:
+            - type
+            - timestamp
+          properties:
+            type:
+              type: string
+              enum: [response_start]
+              example: response_start
+            timestamp:
+              type: string
+              format: date-time
+              description: When response generation started
+
+        - type: object
+          required:
+            - type
+            - delta
+          properties:
+            type:
+              type: string
+              enum: [text_delta]
+              example: text_delta
+            delta:
+              type: string
+              description: Incremental text token from LLM
+              example: "Bipedal locomotion is the ability"
+
+        - type: object
+          required:
+            - type
+            - citation
+          properties:
+            type:
+              type: string
+              enum: [citation]
+              example: citation
+            citation:
+              $ref: '#/components/schemas/Citation'
+
+        - type: object
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              enum: [response_end]
+              example: response_end
+            confidence:
+              type: number
+              format: float
+              description: Confidence in answer grounding (0.0-1.0)
+              minimum: 0.0
+              maximum: 1.0
+              example: 0.92
+            generation_time_ms:
+              type: integer
+              description: LLM generation latency in milliseconds
+              example: 1200
+
+    TextbookChunk:
+      type: object
+      required:
+        - id
+        - chapter_number
+        - section_title
+        - content
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "880e8400-e29b-41d4-a716-446655440003"
+        chapter_number:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 8
+        section_title:
+          type: string
+          example: "Bipedal Locomotion Fundamentals"
+        subsection:
+          type: string
+          nullable: true
+          example: "Physics of Gait Cycles"
+        content:
+          type: string
+          description: First 200 characters of chunk (preview)
+          example: "Bipedal locomotion refers to movement using two legs. In humanoid robots..."
+        relevance_score:
+          type: number
+          format: float
+          description: Search relevance score (0.0-1.0)
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.87
+
+    Citation:
+      type: object
+      required:
+        - chapter_number
+        - section_title
+        - ieee_formatted_text
+        - docusaurus_url
+      properties:
+        chapter_number:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 8
+        section_title:
+          type: string
+          example: "Bipedal Locomotion Fundamentals"
+        subsection:
+          type: string
+          nullable: true
+          example: "Physics of Gait Cycles"
+        page_reference:
+          type: integer
+          nullable: true
+          example: 245
+        ieee_formatted_text:
+          type: string
+          description: Full IEEE citation
+          example: "[1] Chapter 8, Section 2, pp. 245-250"
+        docusaurus_url:
+          type: string
+          format: uri
+          description: Link to textbook section
+          example: "/docs/module-3/chapter-8#bipedal-locomotion"
+        confidence_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.95
+
+    Message:
+      type: object
+      required:
+        - id
+        - role
+        - content
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "660e8400-e29b-41d4-a716-446655440001"
+        role:
+          type: string
+          enum: [user, assistant]
+          example: assistant
+        content:
+          type: string
+          example: "Bipedal locomotion is the ability to walk on two legs..."
+        citations:
+          type: array
+          description: Only present for assistant role
+          items:
+            $ref: '#/components/schemas/Citation'
+          example: [{"chapter_number": 8, "section_title": "Bipedal Locomotion Fundamentals"}]
+        metadata:
+          type: object
+          description: Role-specific metadata
+          properties:
+            generation_time_ms:
+              type: integer
+              description: For assistant role
+            token_count:
+              type: integer
+          example: {"generation_time_ms": 1200, "token_count": 128}
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-01-27T10:00:05Z"
+
+    ConversationResponse:
+      type: object
+      required:
+        - id
+        - user_id
+        - messages
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          example: "student@example.com"
+        title:
+          type: string
+          nullable: true
+          example: "Bipedal Locomotion Q&A"
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-01-27T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-01-27T10:05:30Z"
+
+    ConversationPreview:
+      type: object
+      required:
+        - id
+        - title
+        - message_count
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        title:
+          type: string
+          example: "Understanding ROS 2 Actions"
+        preview:
+          type: string
+          description: First 100 characters of most recent message
+          example: "Q: What are ROS 2 actions? A: Actions are asynchronous request-response..."
+        message_count:
+          type: integer
+          example: 5
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-01-27T10:05:00Z"
+
+    ConversationListResponse:
+      type: object
+      required:
+        - conversations
+        - total
+        - limit
+        - offset
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConversationPreview'
+        total:
+          type: integer
+          description: Total number of conversations (before pagination)
+          example: 47
+        limit:
+          type: integer
+          example: 10
+        offset:
+          type: integer
+          example: 0
+
+    IngestRequest:
+      type: object
+      properties:
+        chapters:
+          oneOf:
+            - type: string
+              enum: [all]
+              description: Ingest all 12 chapters
+            - type: array
+              description: Specific chapter numbers
+              items:
+                type: integer
+                minimum: 1
+                maximum: 12
+              example: [1, 2, 3, 4]
+        force_refresh:
+          type: boolean
+          description: Force re-ingestion even if chapters already embedded
+          default: false
+        chunk_size:
+          type: integer
+          description: Tokens per chunk (recommended 256-512)
+          default: 512
+          minimum: 128
+          maximum: 1024
+        overlap:
+          type: integer
+          description: Token overlap between chunks
+          default: 50
+          minimum: 0
+          maximum: 200
+
+    IngestResponse:
+      type: object
+      required:
+        - batch_id
+        - status
+        - estimated_completion
+        - estimated_cost_usd
+      properties:
+        batch_id:
+          type: string
+          description: OpenAI Batch API job ID for monitoring
+          example: "batch_6716b6d6b00b0f01e5d8c8e6d4c2a1f0"
+        status:
+          type: string
+          enum: [submitted, processing, completed, failed]
+          example: submitted
+        estimated_completion:
+          type: string
+          format: date-time
+          description: Estimated time when batch will complete
+          example: "2026-01-27T12:00:00Z"
+        estimated_cost_usd:
+          type: number
+          format: float
+          description: Estimated cost for embeddings (using Batch API pricing)
+          example: 2.50
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - qdrant
+        - postgres
+        - openai
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          example: healthy
+        qdrant:
+          type: string
+          enum: [connected, disconnected]
+          example: connected
+        postgres:
+          type: string
+          enum: [connected, disconnected]
+          example: connected
+        openai:
+          type: string
+          enum: [responsive, unreachable]
+          example: responsive
+        cache:
+          type: object
+          properties:
+            hit_rate:
+              type: number
+              format: float
+              example: 0.38
+            items:
+              type: integer
+              example: 1024
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-01-27T10:00:00Z"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: Error type (e.g., "invalid_request", "timeout", "service_unavailable")
+          example: "invalid_request"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Query is empty"
+        code:
+          type: string
+          description: Machine-readable error code
+          nullable: true
+          example: "EMPTY_QUERY"
+        details:
+          type: object
+          description: Optional additional context
+          nullable: true
+          example: {"query_length": 0, "min_required": 1}
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-01-27T10:00:00Z"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: User session token from Docusaurus
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Health
+    description: System health and status
+  - name: Chat
+    description: Chat endpoints for user interactions
+  - name: Conversations
+    description: Conversation history management
+  - name: Admin
+    description: Administrative operations (requires admin role)

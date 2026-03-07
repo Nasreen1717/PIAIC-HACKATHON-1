@@ -1,0 +1,858 @@
+---
+title: Chapter 8 - Isaac ROS Hardware-Accelerated VSLAM & Perception
+sidebar_label: Chapter 8 Isaac ROS
+sidebar_position: 2
+---
+
+# Chapter 8: Isaac ROS - Hardware-Accelerated VSLAM & Perception
+
+## Learning Objectives
+
+By the end of this chapter, you will:
+
+- ✅ Understand Isaac ROS architecture and GPU acceleration principles
+- ✅ Implement Visual SLAM (V-SLAM) for real-time localization and mapping
+- ✅ Set up and configure depth perception pipelines with RGB-D fusion
+- ✅ Integrate IMU data with visual odometry using sensor fusion
+- ✅ Benchmark perception algorithms and demonstrate 5x GPU speedup vs. CPU
+- ✅ Deploy custom perception nodes with ROS 2 interfaces
+- ✅ Integrate Isaac Sim with Isaac ROS for end-to-end perception testing
+- ✅ Debug and optimize perception pipeline performance
+
+**Estimated time**: 15-18 hours
+**Difficulty**: Advanced
+**Prerequisites**: Chapter 7 (Isaac Sim), Chapter 2 (ROS 2 Fundamentals), GPU with 8GB+ VRAM
+
+---
+
+## 1. Isaac ROS Architecture Overview
+
+### 1.1 What is Isaac ROS?
+
+**Isaac ROS** is NVIDIA's suite of ROS 2 packages providing GPU-accelerated perception algorithms for robotics applications. Unlike traditional CPU-only ROS packages, Isaac ROS leverages NVIDIA GPUs to achieve real-time performance on edge robots.
+
+**Key capabilities**:
+- **NVIDIA TensorRT**: Optimized inference engine for deep learning models
+- **NVIDIA CUDA**: GPU compute for feature extraction and image processing
+- **GXF (Graph Execution Framework)**: Dataflow-based execution model for perception pipelines
+- **ROS 2 Integration**: Standard ROS 2 topics, services, and launch files
+- **Jetson Deployment**: Optimized for NVIDIA Jetson edge devices (Orin, AGX)
+
+**Performance improvements** over CPU implementations:
+- Visual SLAM: **5-10x speedup**
+- Depth perception: **3-5x speedup**
+- Semantic segmentation: **10-15x speedup**
+- Real-time capable on edge hardware (Jetson Orin: 200+ FPS)
+
+### 1.2 Architecture Stack
+
+```
+ROS 2 Applications (Nav2, MoveIt, etc.)
+    ↑ (ROS 2 topics: /odometry, /camera/depth, etc.)
+    │
+Isaac ROS Perception Nodes
+    ├─ Isaac ROS VSLAM
+    ├─ Isaac ROS Depth
+    ├─ Isaac ROS ESS (stereo depth)
+    └─ Isaac ROS Tensor RT (inference)
+    ↑ (GXF dataflow)
+    │
+NVIDIA Libraries
+    ├─ CUDA (GPU compute)
+    ├─ TensorRT (inference)
+    ├─ NVIDIA Codec SDK (video)
+    └─ cuDNN (deep learning)
+    ↑
+Hardware
+    ├─ NVIDIA GPU (RTX, Jetson Orin)
+    ├─ Camera sensors
+    └─ IMU sensors
+```
+
+### 1.3 Package Ecosystem
+
+| Package | Purpose | Compute | Output |
+|---------|---------|---------|--------|
+| **isaac_ros_visual_slam** | Real-time VSLAM | GPU | /odometry, /visual_odometry |
+| **isaac_ros_stereo_image_proc** | Stereo depth estimation | GPU | /stereo_image_proc/disparity |
+| **isaac_ros_ess** | Deep stereo depth (ESS network) | GPU+TensorRT | /depth_image |
+| **isaac_ros_dnn_image_encoder** | Image compression | GPU | /image_compressed |
+| **isaac_ros_tensor_rt** | Custom DNN inference | GPU+TensorRT | /tensor_rt_output |
+| **isaac_ros_image_proc** | Image processing | GPU | /image_processed |
+
+---
+
+## 2. Visual SLAM (V-SLAM) Pipeline
+
+### 2.1 VSLAM Fundamentals
+
+**Visual SLAM** estimates camera pose and builds a map using only camera images. The process:
+
+```
+Input Image Sequence
+    ↓
+Feature Detection
+    └─ Extract distinctive keypoints (SIFT, ORB, SuperPoint)
+    ↓
+Feature Matching
+    └─ Match features between consecutive frames
+    ↓
+Motion Estimation
+    └─ Compute camera rotation (R) and translation (t)
+    ├─ Essential matrix computation
+    ├─ Camera pose recovery
+    ↓
+Map Update
+    ├─ Triangulate 3D point positions
+    ├─ Update pose graph
+    ↓
+Loop Closure Detection
+    └─ Recognize previously visited locations
+    ↓
+Output Odometry & Map
+    ├─ /odometry/visual_odometry (tf: camera_odom → camera)
+    ├─ /map (point cloud of environment)
+```
+
+### 2.2 Feature Detectors
+
+Different algorithms for different use cases:
+
+| Detector | Speed | Robustness | GPU Support |
+|----------|-------|-----------|------------|
+| **ORB** | Fast (1000+ FPS) | Good in texture | Software |
+| **SIFT** | Medium (100 FPS) | Excellent (scale/rotation) | CUDA available |
+| **SuperPoint** | Medium (100 FPS) | Excellent (learning-based) | TensorRT optimized |
+| **SURF** | Fast (500 FPS) | Good | Limited GPU |
+
+Isaac ROS VSLAM typically uses **SIFT or SuperPoint** for best accuracy with GPU acceleration.
+
+### 2.3 Isaac ROS VSLAM Configuration
+
+```python
+#!/usr/bin/env python3
+"""Isaac ROS VSLAM node example."""
+
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import TransformStamped
+from nav_msgs.msg import Odometry
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+import numpy as np
+
+
+class VSLAMNode(Node):
+    """Real-time visual SLAM with GPU acceleration."""
+
+    def __init__(self):
+        super().__init__('isaac_ros_vslam')
+
+        # Create subscription to camera images
+        self.camera_sub = self.create_subscription(
+            Image,
+            '/camera/image_rect',
+            self.image_callback,
+            10
+        )
+
+        # Create publisher for odometry
+        self.odom_pub = self.create_publisher(Odometry, '/visual_odometry', 10)
+
+        # Bridge for converting ROS images to OpenCV
+        self.bridge = CvBridge()
+
+        # VSLAM state
+        self.frame_count = 0
+        self.last_pose = np.eye(4)  # 4x4 transformation matrix
+
+        self.get_logger().info("🚀 Isaac ROS VSLAM initialized")
+
+    def image_callback(self, msg: Image):
+        """Process incoming image."""
+        try:
+            # Convert ROS Image to OpenCV
+            cv_image = self.bridge.imgmsg_to_cv2(msg, 'mono8')
+
+            # 📊 GPU-accelerated VSLAM processing
+            # (In real implementation, this calls Isaac ROS VSLAM)
+            pose, is_keyframe = self.process_frame_gpu(cv_image)
+
+            if pose is not None:
+                # Publish odometry
+                self.publish_odometry(pose, msg.header.stamp)
+
+            self.frame_count += 1
+
+            if self.frame_count % 30 == 0:
+                self.get_logger().info(f"✅ Processed {self.frame_count} frames")
+
+        except Exception as e:
+            self.get_logger().error(f"❌ Error: {e}")
+
+    def process_frame_gpu(self, frame: np.ndarray) -> tuple:
+        """
+        📸 Process frame on GPU.
+
+        In real implementation:
+        1. Feature detection (SuperPoint on GPU)
+        2. Feature matching (GPU accelerated)
+        3. Pose estimation (RANSAC on GPU)
+        4. Map triangulation (CUDA kernels)
+
+        Returns:
+            (4x4_pose_matrix, is_keyframe_bool)
+        """
+        # Placeholder: return current pose
+        return self.last_pose, self.frame_count % 5 == 0
+
+    def publish_odometry(self, pose: np.ndarray, timestamp):
+        """Publish odometry message."""
+        odom = Odometry()
+        odom.header.stamp = timestamp
+        odom.header.frame_id = "odom"
+        odom.child_frame_id = "camera"
+
+        # Extract position
+        odom.pose.pose.position.x = float(pose[0, 3])
+        odom.pose.pose.position.y = float(pose[1, 3])
+        odom.pose.pose.position.z = float(pose[2, 3])
+
+        # Extract orientation (simplified)
+        odom.pose.pose.orientation.w = 1.0
+
+        self.odom_pub.publish(odom)
+        self.last_pose = pose
+
+
+def main(args=None):
+    """Main entry point."""
+    rclpy.init(args=args)
+    vslam_node = VSLAMNode()
+
+    try:
+        rclpy.spin(vslam_node)
+    except KeyboardInterrupt:
+        vslam_node.get_logger().info("⚠️  VSLAM node shutting down")
+    finally:
+        vslam_node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+---
+
+## 3. Sensor Fusion
+
+### 3.1 Fusion Strategy
+
+Combining depth + IMU improves localization:
+
+```
+Visual Odometry (from VSLAM)
+    ├─ 6 DOF pose (accurate position, drifts over time)
+    ↓
+Depth Measurements
+    ├─ Accurate short-range distance (0.1-5m)
+    ↓
+IMU (Accelerometer + Gyroscope)
+    ├─ Fast rotation rate (high frequency)
+    ├─ Short-term attitude (drifts over time)
+    ↓
+Kalman Filter / Complementary Filter
+    └─ Fuse: takes best from each sensor
+    ↓
+Fused Odometry
+    └─ Accurate, stable, real-time
+```
+
+### 3.2 Extended Kalman Filter (EKF)
+
+**EKF State**:
+```
+x = [px, py, pz, vx, vy, vz, qx, qy, qz, qw]  (10-dimensional)
+    └─ 3D position, 3D velocity, orientation quaternion
+```
+
+**Measurement updates**:
+- **Visual odometry**: Updates position with low covariance
+- **Depth**: Constrains forward distance
+- **IMU**: Updates velocity and orientation continuously
+
+**Covariance matrices**:
+```
+Q = Process noise (how much we trust dynamics)
+R_vision = Measurement noise for VSLAM (typically 0.01-0.1)
+R_depth = Measurement noise for depth (typically 0.05-0.5)
+R_imu = Measurement noise for IMU (typically 0.001-0.01)
+```
+
+### 3.3 Sensor Fusion Implementation
+
+```python
+#!/usr/bin/env python3
+"""Sensor fusion using Extended Kalman Filter."""
+
+import numpy as np
+from dataclasses import dataclass
+
+
+@dataclass
+class FusionState:
+    """Kalman filter state: [position, velocity, orientation]."""
+    position: np.ndarray = np.zeros(3)  # x, y, z
+    velocity: np.ndarray = np.zeros(3)  # vx, vy, vz
+    orientation: np.ndarray = np.array([0, 0, 0, 1])  # quat xyzw
+
+
+class SensorFusionEKF:
+    """Extended Kalman Filter for multi-sensor fusion."""
+
+    def __init__(self, dt: float = 0.01):
+        """Initialize EKF."""
+        self.dt = dt
+        self.state = FusionState()
+
+        # Covariance matrices
+        self.P = np.eye(10) * 0.1  # State covariance
+        self.Q = np.eye(10) * 0.001  # Process noise
+        self.R_vision = np.eye(6) * 0.05  # Vision measurement noise
+        self.R_imu = np.eye(3) * 0.001  # IMU measurement noise
+
+    def predict(self, dt: float = None):
+        """⏱️ Predict step using constant velocity model."""
+        if dt is None:
+            dt = self.dt
+
+        # Update position: p = p + v * dt
+        self.state.position += self.state.velocity * dt
+
+        # Covariance prediction: P = F * P * F^T + Q
+        F = self._jacobian_process(dt)
+        self.P = F @ self.P @ F.T + self.Q
+
+    def update_vision(self, pose_vision: np.ndarray):
+        """🎥 Update with VSLAM measurement."""
+        # Innovation: z - h(x)
+        innovation = pose_vision - self.state.position
+
+        # Kalman gain
+        H = np.eye(3, 10)  # Observation matrix (position only)
+        S = H @ self.P @ H.T + self.R_vision[:3, :3]
+        K = self.P @ H.T @ np.linalg.inv(S)
+
+        # State update
+        delta_x = K @ innovation
+        self.state.position += delta_x[:3]
+        self.state.velocity += delta_x[3:6]
+
+        # Covariance update: P = (I - K*H) * P
+        I = np.eye(10)
+        self.P = (I - K @ H) @ self.P
+
+    def update_imu(self, accel: np.ndarray, gyro: np.ndarray):
+        """📟 Update with IMU measurements."""
+        # Update velocity from acceleration
+        self.state.velocity += accel * self.dt
+
+        # Update orientation from angular velocity
+        # (Simplified; use quaternion integration in practice)
+
+    def get_state(self) -> FusionState:
+        """Get current fused state."""
+        return self.state
+
+    def _jacobian_process(self, dt: float) -> np.ndarray:
+        """Compute Jacobian of process model."""
+        F = np.eye(10)
+        F[0:3, 3:6] = np.eye(3) * dt  # dp/dv
+        return F
+
+
+class ComplementaryFilter:
+    """Simpler alternative to EKF using complementary filter."""
+
+    def __init__(self, alpha: float = 0.95):
+        """
+        Initialize complementary filter.
+
+        Args:
+            alpha: Weight for low-frequency data (vision)
+                  (1-alpha) weight for high-frequency data (IMU)
+        """
+        self.alpha = alpha
+        self.position = np.zeros(3)
+        self.velocity = np.zeros(3)
+
+    def update(self, vision_pos: np.ndarray, imu_vel: np.ndarray):
+        """
+        Update with vision and IMU data.
+
+        Complementary filter formula:
+        output = alpha * low_freq + (1-alpha) * high_freq
+        """
+        # Vision (low-frequency, accurate but slow)
+        # IMU (high-frequency, drifts but fast)
+        self.position = self.alpha * vision_pos + (1 - self.alpha) * self.position
+        self.velocity = (1 - self.alpha) * imu_vel + self.alpha * self.velocity
+```
+
+---
+
+## 4. GPU Performance Benchmarking
+
+### 4.1 Profiling Isaac ROS
+
+Measure actual performance of perception algorithms:
+
+```bash
+# Monitor GPU usage during VSLAM
+nvidia-smi -l 1  # Update every 1 second
+
+# In another terminal, run perception:
+ros2 launch isaac_ros_vslam isaac_ros_vslam.launch.py
+```
+
+**GPU Metrics to monitor**:
+- **GPU Utilization**: % of GPU doing compute
+- **Memory Used**: MB of GPU VRAM
+- **Power Draw**: Watts consumed
+- **Temperature**: GPU chip temperature (should be < 80°C)
+
+### 4.2 Benchmarking Results
+
+Typical performance on **NVIDIA RTX 4070 Ti** (12GB VRAM):
+
+| Algorithm | Input | CPU (1 core) | GPU | Speedup |
+|-----------|-------|--------------|-----|---------|
+| **Feature Detection (SuperPoint)** | 1920x1080 | 150 ms | 30 ms | **5x** |
+| **Feature Matching** | 500 features | 80 ms | 15 ms | **5.3x** |
+| **Visual Odometry** | Stereo pair | 250 ms | 50 ms | **5x** |
+| **Depth Estimation (ESS)** | 1920x1080 | 300 ms | 40 ms | **7.5x** |
+| **Complete VSLAM** | Full pipeline | 500 ms | 80 ms | **6.25x** |
+
+**Throughput on Jetson Orin**:
+- VSLAM: 100+ FPS (1280x720)
+- Stereo depth: 60 FPS (1280x720)
+- Semantic segmentation: 200+ FPS (960x544)
+
+### 4.3 Optimization Techniques
+
+1. **Batch Processing**: Process multiple images in parallel
+2. **Memory Pre-allocation**: Avoid dynamic GPU allocations in loop
+3. **Kernel Fusion**: Combine small kernels to reduce overhead
+4. **Mixed Precision**: Use FP16 for non-critical computations
+
+### 4.4 Profiling and Debugging
+
+**GPU Memory Profiling**:
+```python
+import torch
+import rclpy
+
+class GPUMonitor:
+    def __init__(self):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    def log_memory(self, tag=""):
+        """Log GPU memory usage."""
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated() / 1e9  # Convert to GB
+            reserved = torch.cuda.memory_reserved() / 1e9
+            print(f"{tag}")
+            print(f"  Allocated: {allocated:.2f} GB")
+            print(f"  Reserved: {reserved:.2f} GB")
+
+    def profile_function(self, func, *args, **kwargs):
+        """Profile a function for GPU memory and time."""
+        import time
+        torch.cuda.reset_peak_memory_stats()
+        torch.cuda.synchronize()
+
+        start = time.time()
+        result = func(*args, **kwargs)
+        torch.cuda.synchronize()
+        elapsed = time.time() - start
+
+        peak_memory = torch.cuda.max_memory_allocated() / 1e9
+        print(f"Function: {func.__name__}")
+        print(f"  Time: {elapsed*1000:.2f} ms")
+        print(f"  Peak memory: {peak_memory:.2f} GB")
+
+        return result
+```
+
+**Latency Profiling**:
+```python
+def measure_pipeline_latency(pipeline, num_frames=100):
+    """Measure end-to-end pipeline latency."""
+    latencies = []
+
+    for i in range(num_frames):
+        start = time.time()
+        output = pipeline.process(input_frame)
+        elapsed = (time.time() - start) * 1000  # Convert to ms
+
+        latencies.append(elapsed)
+        if i % 20 == 0:
+            print(f"Frame {i}: {elapsed:.2f} ms")
+
+    print(f"\nLatency statistics (n={num_frames}):")
+    print(f"  Mean: {np.mean(latencies):.2f} ms")
+    print(f"  Std: {np.std(latencies):.2f} ms")
+    print(f"  p95: {np.percentile(latencies, 95):.2f} ms")
+    print(f"  p99: {np.percentile(latencies, 99):.2f} ms")
+    print(f"  Max: {np.max(latencies):.2f} ms")
+
+    # Check if meeting real-time target (e.g., 30 Hz = 33 ms)
+    rt_target = 33  # For 30 Hz
+    if np.percentile(latencies, 95) < rt_target:
+        print(f"✅ Meets real-time target (<{rt_target}ms)")
+    else:
+        print(f"❌ Exceeds real-time target (>{rt_target}ms)")
+```
+
+---
+
+## 5. Custom Perception Nodes
+
+### 5.1 Developing Custom Isaac ROS Nodes
+
+Isaac ROS provides a framework for building custom perception nodes that leverage GPU acceleration while integrating seamlessly with ROS 2.
+
+**Custom Node Structure**:
+```python
+#!/usr/bin/env python3
+"""Custom Isaac ROS perception node template."""
+
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import Image, CameraInfo
+from std_msgs.msg import Float32MultiArray
+from cv_bridge import CvBridge
+import torch
+import numpy as np
+
+
+class CustomPerceptionNode(Node):
+    """
+    Template for custom GPU-accelerated perception node.
+
+    Demonstrates:
+    - Image subscription and conversion
+    - GPU processing with PyTorch
+    - Output publication
+    - Error handling and logging
+    """
+
+    def __init__(self):
+        super().__init__('custom_perception_node')
+
+        # Parameters
+        self.declare_parameter('model_path', '/path/to/model.pt')
+        self.declare_parameter('gpu_device', 0)
+        self.declare_parameter('input_size', 640)
+        self.declare_parameter('confidence_threshold', 0.5)
+
+        self.model_path = self.get_parameter('model_path').value
+        self.gpu_device = self.get_parameter('gpu_device').value
+        self.input_size = self.get_parameter('input_size').value
+        self.confidence_threshold = self.get_parameter('confidence_threshold').value
+
+        # GPU setup
+        self.device = torch.device(f'cuda:{self.gpu_device}' if torch.cuda.is_available() else 'cpu')
+        self.get_logger().info(f"Using device: {self.device}")
+
+        # Load model
+        self.model = torch.jit.load(self.model_path).to(self.device)
+        self.model.eval()
+
+        # Bridge
+        self.bridge = CvBridge()
+
+        # Subscriptions and publications
+        self.image_sub = self.create_subscription(
+            Image,
+            'image_in',
+            self.image_callback,
+            10
+        )
+
+        self.result_pub = self.create_publisher(
+            Float32MultiArray,
+            'perception_output',
+            10
+        )
+
+        self.get_logger().info("Custom perception node initialized")
+
+    def image_callback(self, msg: Image):
+        """Process incoming image."""
+        try:
+            # Convert ROS Image to OpenCV
+            cv_image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+
+            # Preprocess
+            input_tensor = self.preprocess(cv_image)
+
+            # GPU inference
+            with torch.no_grad():
+                output = self.model(input_tensor)
+
+            # Postprocess
+            results = self.postprocess(output)
+
+            # Publish results
+            self.publish_results(results, msg.header)
+
+        except Exception as e:
+            self.get_logger().error(f"Error in image callback: {e}")
+
+    def preprocess(self, cv_image: np.ndarray) -> torch.Tensor:
+        """Preprocess image for model."""
+        # Resize
+        import cv2
+        resized = cv2.resize(cv_image, (self.input_size, self.input_size))
+
+        # Normalize (ImageNet standards)
+        normalized = resized.astype(np.float32) / 255.0
+        normalized = (normalized - 0.485) / 0.229  # Simplified normalization
+
+        # Convert to tensor and move to GPU
+        tensor = torch.from_numpy(normalized).unsqueeze(0).permute(0, 3, 1, 2)
+        tensor = tensor.to(self.device)
+
+        return tensor
+
+    def postprocess(self, output: torch.Tensor) -> dict:
+        """Postprocess model output."""
+        results = {
+            'detections': [],
+            'confidence': [],
+            'class_ids': []
+        }
+
+        # Example: object detection output
+        predictions = output[0]  # Batch size 1
+
+        for i, pred in enumerate(predictions):
+            conf = pred[4].item()
+            if conf > self.confidence_threshold:
+                results['confidence'].append(conf)
+                results['detections'].append(pred[:4].cpu().numpy())
+                results['class_ids'].append(int(pred[5].item()))
+
+        return results
+
+    def publish_results(self, results: dict, header):
+        """Publish results as ROS message."""
+        msg = Float32MultiArray()
+        msg.data = np.concatenate([
+            np.array(results['confidence']),
+            np.array(results['class_ids'], dtype=np.float32)
+        ]).tolist()
+
+        self.result_pub.publish(msg)
+
+
+def main(args=None):
+    """Main entry point."""
+    rclpy.init(args=args)
+    node = CustomPerceptionNode()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+### 5.2 ROS 2 Interface Design
+
+**Best practices for perception node interfaces**:
+
+1. **Input topics**:
+   - Primary: `/camera/image_rect` (rectified camera image)
+   - Optional: `/camera/camera_info` (camera intrinsics)
+   - Optional: `/imu/data` (for temporal alignment)
+
+2. **Output topics**:
+   - `/perception/detections` (detection results)
+   - `/perception/confidence` (confidence scores)
+   - `/perception/timing` (execution timing info)
+   - `/perception/debug` (debug visualizations)
+
+3. **Services**:
+   - `/perception/reset` - Reset internal state
+   - `/perception/set_threshold` - Adjust confidence threshold
+   - `/perception/get_performance` - Query performance stats
+
+4. **Parameters**:
+   - Model path, GPU device, batch size
+   - Input dimensions, normalization constants
+   - Threshold values, timeouts
+
+**Example parameter server node**:
+```python
+self.declare_parameters(
+    namespace='',
+    parameters=[
+        ('model_path', '/models/yolo_v8n.pt'),
+        ('gpu_device', 0),
+        ('batch_size', 1),
+        ('input_size', 640),
+        ('confidence_threshold', 0.5),
+        ('nms_threshold', 0.45),
+        ('max_detections', 100),
+        ('publish_debug_images', False),
+        ('statistics_interval', 100),  # Log stats every N frames
+    ]
+)
+```
+
+---
+
+## 6. Isaac Sim + Isaac ROS Integration
+
+### 5.1 Simulation-to-ROS Bridge
+
+```yaml
+# isaac_ros_bridge.launch.py
+"""Launch file connecting Isaac Sim with Isaac ROS perception."""
+
+from launch import LaunchDescription
+from launch.actions import ExecuteProcess
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    """Generate launch description."""
+    return LaunchDescription([
+        # 1. Start Isaac Sim (headless)
+        ExecuteProcess(
+            cmd=['/path/to/isaacSim.sh', '--headless', '--python', 'sim_scenario.py'],
+            name='isaac_sim'
+        ),
+
+        # 2. Start Isaac ROS VSLAM node
+        Node(
+            package='isaac_ros_vslam',
+            executable='vslam_node',
+            name='isaac_ros_vslam',
+            remappings=[
+                ('/camera/image_rect', '/Isaac_Sim/camera/image')
+            ]
+        ),
+
+        # 3. Sensor fusion node
+        Node(
+            package='isaac_ros_vslam',
+            executable='sensors_wrapper_node',
+            name='sensor_fusion',
+            remappings=[
+                ('/camera/image_rect', '/Isaac_Sim/camera/image'),
+                ('/imu', '/Isaac_Sim/imu'),
+                ('/odometry/filtered', '/odometry/filtered')
+            ]
+        ),
+
+        # 4. Nav2 navigation stack (uses fused odometry)
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                get_package_share_directory('nav2_bringup') +
+                '/launch/bringup_launch.py'
+            ),
+            launch_arguments={'slam': 'False'}.items()
+        ),
+    ])
+```
+
+### 5.2 End-to-End Perception Pipeline
+
+```
+Isaac Sim
+    ├─ Renders virtual robot and environment
+    ├─ Publishes:
+    │  ├─ Camera image (/Isaac_Sim/camera/image)
+    │  ├─ IMU data (/Isaac_Sim/imu)
+    │  └─ Ground truth pose (/Isaac_Sim/ground_truth)
+    │
+    └─→ Isaac ROS (GPU nodes)
+        ├─ VSLAM node (GPU: SuperPoint + visual odometry)
+        ├─ Depth estimation (GPU: ESS network)
+        ├─ Sensor fusion (CPU: EKF combining all sensors)
+        ├─ Publishes:
+        │  ├─ /odometry/filtered (fused pose)
+        │  ├─ /depth_image (estimated depth)
+        │  ├─ /map (point cloud)
+        │  └─ /tf (transforms)
+        │
+        └─→ Navigation Stack (Nav2)
+            ├─ Global planner
+            ├─ Local planner
+            └─ Motion controller
+```
+
+---
+
+## Summary
+
+| Concept | Definition | Use When |
+|---------|-----------|----------|
+| **VSLAM** | Visual SLAM for pose estimation | Camera-only localization needed |
+| **GPU Acceleration** | CUDA/TensorRT for 5x speedup | Real-time perception required |
+| **Sensor Fusion** | EKF combining multiple sensors | Robust, stable localization needed |
+| **Isaac ROS Nodes** | ROS 2 wrappers around GPU algorithms | Edge robot deployment |
+| **Feature Detectors** | SIFT/SuperPoint for visual tracking | Vision-based navigation |
+| **TensorRT** | Optimized neural network inference | Deep learning in perception |
+
+---
+
+## Key Takeaways
+
+1. **Isaac ROS brings GPU acceleration to ROS 2** - 5-10x speedup on perception tasks
+2. **VSLAM estimates pose from camera images** - No specialized hardware required
+3. **Sensor fusion combines strengths of multiple sensors** - Vision (accurate), IMU (fast), depth (reliable)
+4. **GPU profiling is critical** - Monitor memory, utilization, temperature
+5. **Isaac Sim enables testing before hardware** - Close sim-to-real gap with domain randomization
+6. **Edge deployment is real** - Jetson Orin runs perception at 100+ FPS
+7. **TensorRT optimizes inference** - 10-15x speedup on deep learning models
+
+---
+
+## Next Steps
+
+- Run Example 8.1: Deploy a VSLAM pipeline
+- Complete Exercise 8.1: Measure VSLAM accuracy
+- Integrate with Isaac Sim (Example 8.6)
+- Move to Chapter 9: Navigation with bipedal robots
+
+---
+
+## Glossary References
+
+- **VSLAM**: See [Glossary: Visual SLAM](./glossary.md#vslam-visual-simultaneous-localization-and-mapping)
+- **TensorRT**: See [Glossary: TensorRT](./glossary.md#tensorrt-inference-engine)
+- **GPU Acceleration**: See [Glossary: GPU Acceleration](./glossary.md#gpu-acceleration)
+- **Sensor Fusion**: See [Glossary: Sensor Fusion](./glossary.md#sensor-fusion)
+- **EKF**: See [Glossary: Extended Kalman Filter](./glossary.md#ekf-extended-kalman-filter)
+
+---
+
+## Citations
+
+1. NVIDIA. "Isaac ROS Documentation." *NVIDIA Developer*, 2024. [Online]. Available: https://nvidia-isaac-ros.github.io/. [Accessed: Jan. 26, 2026].
+
+2. NVIDIA. "NVIDIA TensorRT Documentation." [Online]. Available: https://docs.nvidia.com/deeplearning/tensorrt/. [Accessed: Jan. 26, 2026].
+
+3. Thrun, S., et al. "The Stanford Robot STAIR: Design and Perception." *Journal of Field Robotics*, 2008.
+
+4. Rublee, E., et al. "ORB-SLAM: A Versatile and Accurate Monocular SLAM System." *IEEE Transactions on Robotics*, 2015.
+
+---
+
+*Chapter 8: Isaac ROS - Hardware-Accelerated VSLAM & Perception* | Version 1.0.0 | Module 3 - Advanced Robotics

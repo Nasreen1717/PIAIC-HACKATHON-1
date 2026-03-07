@@ -1,0 +1,879 @@
+---
+title: Chapter 12 - Capstone Project - Autonomous Humanoid Integration
+sidebar_label: Chapter 12 Capstone Humanoid
+sidebar_position: 3
+---
+
+# Chapter 12: Capstone - Autonomous Humanoid Robot Execution
+
+## Learning Objectives
+
+By the end of this chapter, you will:
+
+- ✅ Integrate voice input, LLM planning, and action execution into a unified VLA pipeline
+- ✅ Execute multi-step autonomous tasks with real-time monitoring and error recovery
+- ✅ Measure end-to-end performance metrics (latency, success rate, safety)
+- ✅ Debug and troubleshoot full-stack failures in humanoid robotics systems
+- ✅ Demonstrate and document a complete capstone project with measurable results
+
+**Estimated time**: 8-10 hours
+**Difficulty**: Advanced
+**Prerequisites**: Chapters 10-11 (Module 4 foundation), ROS 2 launch files, Modules 1-3 systems
+
+---
+
+## 1. Full VLA Pipeline Architecture
+
+### 1.1 End-to-End Vision-Language-Action System
+
+The complete VLA pipeline chains Chapters 10 and 11 into an integrated autonomous system:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│         FULL VISION-LANGUAGE-ACTION PIPELINE             │
+└──────────────────────────────────────────────────────────┘
+
+┌──────────┐
+│  Voice   │
+│  Input   │  User speaks: "Bring me the red cube"
+└────┬─────┘
+     │ (Chapter 10)
+     ↓
+┌────────────────────────┐
+│  Whisper Transcription │  Output: "bring me the red cube"
+│  Latency: &lt;2s          │
+└────┬───────────────────┘
+     │
+     ↓
+┌────────────────────────┐
+│  LLM Planning (Ch 11)  │  Input: transcribed command
+│  Task Decomposition    │  Output: [navigate, perceive, manipulate, ...]
+│  Latency: &lt;5s          │
+└────┬───────────────────┘
+     │
+     ↓
+┌────────────────────────────────────┐
+│  Plan Validation & Safety Checks   │
+│  • Validate action types           │
+│  • Check parameter ranges          │
+│  • Verify step dependencies        │
+└────┬─────────────────────────────┘
+     │
+     ↓
+┌────────────────────────────────────┐
+│  Executor Node (This Chapter)       │
+│  • Execute steps sequentially       │
+│  • Call Nav2, perception, MoveIt    │
+│  • Monitor success/failure          │
+│  • Error recovery                   │
+└────┬─────────────────────────────┘
+     │
+     ↓
+┌──────────────────────────────────────────┐
+│  Execution Trace (Metrics & Logging)     │
+│  • Total duration                        │
+│  • Success rate (# completed / # total)  │
+│  • Safety incidents                      │
+│  • Step-by-step logs                     │
+└──────────────────────────────────────────┘
+```
+
+### 1.2 System Components
+
+| Component | Chapter | Role | Latency Target |
+|-----------|---------|------|-----------------|
+| **Whisper Transcriber** | 10 | Audio → Text | &lt;2 seconds |
+| **LLM Planner** | 11 | Text → Task Plan | &lt;5 seconds |
+| **Executor** | 12 | Plan → Robot Actions | &lt;20 seconds |
+| **Total Pipeline** | 12 | Voice → Completion | &lt;30 seconds |
+
+### 1.3 Information Flow
+
+```
+Step 1: Voice Capture
+  • Duration: 2 seconds
+  • Audio: 16-bit PCM, 16kHz, mono
+  • Size: ~64 KB
+
+Step 2: Transcription (Whisper)
+  • Input: WAV audio bytes
+  • Processing: 1-2 seconds
+  • Output: transcript + confidence
+
+Step 3: Task Decomposition (LLM)
+  • Input: "bring me red cube"
+  • Processing: 3-5 seconds (API latency + thinking)
+  • Output: JSON array of steps
+
+Step 4: Plan Validation
+  • Check: action_type, parameters, dependencies
+  • Time: &lt;100ms
+  • Output: validated_plan or errors
+
+Step 5: Sequential Execution
+  • For each step:
+    - Call appropriate ROS 2 action/service
+    - Monitor for success/failure
+    - Log outcome
+    - Estimate: 2-5 seconds per step
+
+Step 6: Metrics Collection
+  • Track all latencies and outcomes
+  • Compile ExecutionTrace message
+  • Time: &lt;100ms
+```
+
+---
+
+## 2. Executor Node Implementation
+
+### 2.1 Executor Node Architecture
+
+The **executor_node** is the core orchestrator that executes task plans:
+
+```python
+class ExecutorNode(LifecycleNode):
+    def on_configure(self):
+        # Initialize action clients for Nav2, perception, arm control
+        # Setup logging and metrics collection
+        pass
+
+    def on_activate(self):
+        # Start listening for ExecuteTaskPlan action requests
+        # Initialize ExecutionTrace
+        pass
+
+    def execute_task_plan(self, plan: TaskPlan) -> ExecutionTrace:
+        # For each step in plan:
+        #   1. Call appropriate action/service
+        #   2. Monitor for success/failure
+        #   3. Log outcome
+        #   4. Check for error recovery needed
+        # Return ExecutionTrace with metrics
+        pass
+```
+
+### 2.2 Action Clients for Subsystems
+
+The executor interacts with three subsystems via ROS 2 actions/services:
+
+**1. Navigation (Nav2)**
+```python
+class NavigationActionClient:
+    # Calls nav2_msgs/action/NavigateToPose
+    # Parameters: goal_pose (PoseStamped)
+    # Returns: success / failure reason
+    pass
+
+# Usage:
+nav_client.navigate_to(destination="kitchen")
+```
+
+**2. Perception (Vision Module)**
+```python
+class PerceptionServiceClient:
+    # Calls custom perception service
+    # Parameters: target_object, search_location
+    # Returns: object_id, 3D coordinates
+    pass
+
+# Usage:
+perception_result = perception_client.detect_object("red cube", "on_table")
+```
+
+**3. Manipulation (MoveIt/Arm Control)**
+```python
+class ManipulationActionClient:
+    # Calls custom manipulation action
+    # Parameters: object_id, action (grasp/release), target_location
+    # Returns: success / failure reason
+    pass
+
+# Usage:
+manip_client.grasp_object(object_id="obj_123")
+```
+
+### 2.3 Error Recovery Strategies
+
+| Error Type | Example | Recovery Strategy |
+|-----------|---------|-------------------|
+| **Navigation Blocked** | Path obstacle | Retry with alternate route; request user intervention |
+| **Object Not Found** | Perception fails | Expand search radius; ask user for location hint |
+| **Gripper Slip** | Object drops | Retry grasp 3× with varied grip force |
+| **Timeout** | Step exceeds 30s | Log timeout, skip step, continue to next |
+| **API Unavailable** | Service crashed | Wait 5 seconds, retry; fallback to manual mode |
+
+---
+
+## 3. Error Recovery & Failure Handling
+
+### 3.1 Retry Logic
+
+```python
+class ErrorRecoveryManager:
+    """Handle step failures with appropriate recovery."""
+
+    def handle_step_failure(self, step: ExecutionStep, error: str) -> bool:
+        """
+        Attempt recovery for failed step.
+
+        Returns:
+            True if recovery successful, False if unrecoverable
+        """
+        action_type = step['action_type']
+
+        # ✅ Navigation failures
+        if action_type == 'navigate':
+            if 'path_blocked' in error:
+                # Retry with alternate route
+                return self.retry_navigation_alternate_route(step)
+            elif 'timeout' in error:
+                # Skip and continue
+                return False
+
+        # ✅ Perception failures
+        elif action_type == 'perceive':
+            if 'object_not_found' in error:
+                # Expand search area
+                return self.expand_perception_search(step)
+
+        # ✅ Manipulation failures
+        elif action_type == 'manipulate':
+            if 'gripper_slip' in error:
+                # Retry with increased grip force
+                return self.retry_grasp_increased_force(step)
+
+        return False
+```
+
+### 3.2 Logging & Failure Analysis
+
+```python
+class ExecutionLogger:
+    """Log all execution events for analysis."""
+
+    def __init__(self):
+        self.events = []
+
+    def log_step_start(self, step_index: int, action: str):
+        self.events.append({
+            'type': 'step_start',
+            'step_index': step_index,
+            'action': action,
+            'timestamp': time.time()
+        })
+
+    def log_step_success(self, step_index: int, duration: float, outcome: dict):
+        self.events.append({
+            'type': 'step_success',
+            'step_index': step_index,
+            'duration': duration,
+            'outcome': outcome,
+            'timestamp': time.time()
+        })
+
+    def log_step_failure(self, step_index: int, error: str, recovery_attempted: bool):
+        self.events.append({
+            'type': 'step_failure',
+            'step_index': step_index,
+            'error': error,
+            'recovery_attempted': recovery_attempted,
+            'timestamp': time.time()
+        })
+
+    def save_execution_trace(self, file_path: str):
+        """Save execution trace to JSON for analysis."""
+        with open(file_path, 'w') as f:
+            json.dump(self.events, f, indent=2)
+```
+
+---
+
+## 4. Master Launch File Configuration
+
+### 4.1 Launch File Structure
+
+The **all_nodes.launch.py** file starts all modules in the correct order:
+
+```python
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    """Generate launch description for full VLA pipeline."""
+
+    return LaunchDescription([
+        # ✅ Declare parameters
+        DeclareLaunchArgument(
+            'use_sim',
+            default_value='true',
+            description='Use simulation (Isaac Sim) or real hardware'
+        ),
+        DeclareLaunchArgument(
+            'robot_model',
+            default_value='humanoid',
+            description='Robot model to use'
+        ),
+
+        # ✅ Start custom_msgs (dependency for all nodes)
+        # (No node needed; message definitions compiled into packages)
+
+        # ✅ Start Whisper Transcriber Node
+        Node(
+            package='whisper_node',
+            executable='transcriber_node',
+            name='whisper_transcriber',
+            parameters=[
+                {'audio_device': 0},
+                {'model_version': 'base'},
+                {'confidence_threshold': 0.5}
+            ]
+        ),
+
+        # ✅ Start LLM Planner Node
+        Node(
+            package='llm_planner_node',
+            executable='planner_node',
+            name='llm_planner',
+            parameters=[
+                {'llm_model': 'gpt-4'},
+                {'temperature': 0.3},
+                {'timeout_seconds': 5.0}
+            ]
+        ),
+
+        # ✅ Start Executor Node
+        Node(
+            package='executor_node',
+            executable='executor_node',
+            name='task_executor',
+            parameters=[
+                {'use_sim': LaunchConfig('use_sim')},
+                {'max_step_duration': 20.0}
+            ]
+        ),
+
+        # ✅ Start Nav2 (from Module 3)
+        Node(
+            package='nav2_bringup',
+            executable='bringup_launch.py',
+            parameters=[
+                {'use_sim_time': LaunchConfig('use_sim')},
+                {'robot_model': LaunchConfig('robot_model')}
+            ]
+        ),
+
+        # ✅ Start Perception Stack (from Module 3)
+        Node(
+            package='perception_stack',
+            executable='perception_node',
+            name='perception'
+        ),
+
+        # ✅ Start MoveIt (arm control)
+        Node(
+            package='moveit_ros_planning',
+            executable='move_group',
+            name='move_group'
+        )
+    ])
+```
+
+### 4.2 Simulation vs. Real Hardware
+
+**Simulation Mode** (Isaac Sim):
+```bash
+ros2 launch module_4_launch all_nodes.launch.py use_sim:=true robot_model:=humanoid
+```
+
+**Real Hardware**:
+```bash
+ros2 launch module_4_launch all_nodes.launch.py use_sim:=false robot_model:=humanoid
+```
+
+---
+
+## 5. Capstone Scenario Execution
+
+### 5.1 Predefined Tasks
+
+**Scenario 1 (Simple)**: "Move the red cube"
+- Expected steps: navigate → perceive → manipulate → navigate
+- Target latency: &lt;20 seconds
+- Success criteria: cube at new location
+
+**Scenario 2 (Complex)**: "Bring me the red cube from the kitchen table"
+- Expected steps: navigate → perceive → navigate → manipulate → navigate
+- Target latency: &lt;30 seconds
+- Success criteria: cube in user's hand
+
+**Scenario 3 (Real-World)**: "Fetch the blue bottle, avoid the cat, place on counter"
+- Expected steps: navigate (with avoidance) → perceive → manipulate → navigate
+- Target latency: &lt;40 seconds
+- Success criteria: bottle safely on counter, no collision with cat
+
+### 5.2 Metrics Collection
+
+For each execution, measure:
+
+```python
+class CapstoneMetrics:
+    """Collect metrics for capstone evaluation."""
+
+    def __init__(self):
+        self.start_time = time.time()
+        self.steps_completed = 0
+        self.steps_failed = 0
+        self.step_latencies = []
+        self.safety_incidents = []
+        self.log_messages = []
+
+    def record_step_latency(self, step_index: int, latency: float):
+        self.step_latencies.append({
+            'step': step_index,
+            'latency': latency
+        })
+
+    def record_safety_incident(self, incident_type: str, description: str):
+        self.safety_incidents.append({
+            'type': incident_type,
+            'description': description,
+            'timestamp': time.time()
+        })
+
+    def get_summary(self) -> dict:
+        total_duration = time.time() - self.start_time
+        total_steps = self.steps_completed + self.steps_failed
+
+        return {
+            'total_duration': total_duration,
+            'steps_completed': self.steps_completed,
+            'steps_failed': self.steps_failed,
+            'success_rate': self.steps_completed / max(1, total_steps),
+            'avg_step_latency': mean(l['latency'] for l in self.step_latencies),
+            'safety_incidents': len(self.safety_incidents),
+            'incidents': self.safety_incidents
+        }
+```
+
+---
+
+## 6. Troubleshooting & Performance Analysis
+
+### 6.1 Common Failure Modes
+
+| Failure | Symptoms | Debugging |
+|---------|----------|-----------|
+| **API Timeout** | Plan gen &gt;10s | Check network, OpenAI API status |
+| **Navigation Failure** | Robot stuck at obstacle | Verify Nav2 config, check map |
+| **Object Not Found** | Perception returns empty | Check lighting, object visibility, search area |
+| **Gripper Slip** | Object drops mid-grasp | Tune grip force, check object surface |
+| **Plan Invalid** | Executor rejects plan | Review LLM output, check schema validation |
+
+### 6.2 Performance Profiling
+
+```python
+class PerformanceProfiler:
+    """Profile latency across pipeline stages."""
+
+    def profile_full_pipeline(self, goal: str) -> dict:
+        """Measure latency for each pipeline stage."""
+        profile = {}
+
+        # Stage 1: Transcription
+        start = time.time()
+        transcript = whisper_transcriber.transcribe(audio)
+        profile['transcription'] = time.time() - start
+
+        # Stage 2: Planning
+        start = time.time()
+        plan = llm_planner.generate_plan(transcript)
+        profile['planning'] = time.time() - start
+
+        # Stage 3: Validation
+        start = time.time()
+        validator.validate_plan(plan)
+        profile['validation'] = time.time() - start
+
+        # Stage 4: Execution
+        start = time.time()
+        trace = executor.execute_plan(plan)
+        profile['execution'] = time.time() - start
+
+        profile['total'] = sum(profile.values())
+
+        return profile
+```
+
+---
+
+## Code Examples
+
+### Example 7: Single-Step Execution with Action Clients
+
+```python
+"""
+🚀 Module 4 Example 7: Single-Step Execution
+Demonstrates executing a single action (navigation) from a task plan.
+"""
+
+import rclpy
+import time
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from nav2_msgs.action import NavigateToPose
+from geometry_msgs.msg import PoseStamped
+
+class SingleStepExecutor(Node):
+    """Execute a single navigation step."""
+
+    def __init__(self):
+        super().__init__('single_step_executor')
+        self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+
+    def execute_navigation_step(self, destination: str) -> dict:
+        """
+        Execute a single navigation step.
+
+        Args:
+            destination: Target location name
+
+        Returns:
+            {'status': 'success'|'failure', 'duration': float, 'error': str or None}
+        """
+        # ✅ Define known locations (map to 3D coordinates)
+        locations = {
+            'kitchen': (3.0, 2.0, 0.0),
+            'bedroom': (5.0, 5.0, 0.0),
+            'living_room': (1.0, 4.0, 0.0)
+        }
+
+        if destination not in locations:
+            return {
+                'status': 'failure',
+                'duration': 0.0,
+                'error': f"Unknown location: {destination}"
+            }
+
+        # ✅ Create pose goal
+        goal = NavigateToPose.Goal()
+        goal.pose.header.frame_id = 'map'
+        goal.pose.pose.position.x = float(locations[destination][0])
+        goal.pose.pose.position.y = float(locations[destination][1])
+        goal.pose.pose.position.z = float(locations[destination][2])
+        goal.pose.pose.orientation.w = 1.0
+
+        # ✅ Send goal and wait for result
+        start_time = time.time()
+
+        future = self.nav_client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self, future)
+
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            return {
+                'status': 'failure',
+                'duration': time.time() - start_time,
+                'error': 'Navigation goal rejected'
+            }
+
+        # ✅ Wait for result
+        result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(self, result_future)
+
+        result = result_future.result()
+        duration = time.time() - start_time
+
+        if result is None:
+            return {
+                'status': 'failure',
+                'duration': duration,
+                'error': 'Navigation failed (result is None)'
+            }
+
+        return {
+            'status': 'success',
+            'duration': duration,
+            'error': None
+        }
+
+
+def main():
+    rclpy.init()
+    executor = SingleStepExecutor()
+
+    # ✅ Execute navigation to kitchen
+    result = executor.execute_navigation_step('kitchen')
+
+    print(f"Status: {result['status']}")
+    print(f"Duration: {result['duration']:.2f}s")
+    if result['error']:
+        print(f"Error: {result['error']}")
+
+    executor.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+### Example 8: Full Multi-Step Capstone Execution with Metrics
+
+```python
+"""
+🚀 Module 4 Example 8: Full Capstone Execution Pipeline
+Demonstrates end-to-end execution from voice input to task completion.
+Includes metrics collection and logging.
+"""
+
+import rclpy
+import time
+import json
+from dataclasses import dataclass, asdict
+from typing import List
+from rclpy.node import Node
+
+@dataclass
+class StepMetric:
+    """Metrics for a single execution step."""
+    step_index: int
+    action_type: str
+    duration: float
+    success: bool
+    error: str = None
+
+class CapstoneExecutor(Node):
+    """Execute full VLA pipeline from voice to completion."""
+
+    def __init__(self):
+        super().__init__('capstone_executor')
+        self.metrics: List[StepMetric] = []
+        self.start_time = None
+
+    def execute_capstone_scenario(self, goal: str) -> dict:
+        """
+        Execute full capstone scenario: voice → plan → execute → metrics.
+
+        Args:
+            goal: High-level goal description
+
+        Returns:
+            Execution summary with metrics
+        """
+        self.start_time = time.time()
+        self.metrics = []
+
+        try:
+            # ✅ Step 1: Transcription (simulated)
+            self.get_logger().info(f"🎤 Goal: '{goal}'")
+
+            # ✅ Step 2: LLM Planning (simulated)
+            plan = self.simulate_llm_planning(goal)
+            self.get_logger().info(f"📋 Generated plan with {len(plan)} steps")
+
+            # ✅ Step 3: Execute each step
+            for step_index, step in enumerate(plan):
+                success, duration, error = self.execute_step(step_index, step)
+                self.metrics.append(
+                    StepMetric(
+                        step_index=step_index,
+                        action_type=step['action'],
+                        duration=duration,
+                        success=success,
+                        error=error
+                    )
+                )
+
+                status = "✅" if success else "❌"
+                self.get_logger().info(
+                    f"{status} Step {step_index}: {step['action']} ({duration:.2f}s)"
+                )
+
+                if not success:
+                    self.get_logger().warn(f"   Error: {error}")
+
+            # ✅ Step 4: Compile results
+            total_duration = time.time() - self.start_time
+            success_count = sum(1 for m in self.metrics if m.success)
+
+            summary = {
+                'goal': goal,
+                'total_duration': total_duration,
+                'steps_completed': success_count,
+                'steps_failed': len(self.metrics) - success_count,
+                'success_rate': success_count / max(1, len(self.metrics)),
+                'metrics': [asdict(m) for m in self.metrics]
+            }
+
+            return summary
+
+        except Exception as e:
+            self.get_logger().error(f"❌ Capstone execution failed: {str(e)}")
+            raise
+
+    def execute_step(self, step_index: int, step: dict) -> tuple:
+        """
+        ✅ Execute a single step in the plan.
+
+        Returns:
+            (success, duration, error_message)
+        """
+        start_time = time.time()
+        action = step['action']
+
+        try:
+            if action == 'navigate':
+                # Simulated navigation (2-5 seconds)
+                time.sleep(3.0)
+                return True, time.time() - start_time, None
+
+            elif action == 'perceive':
+                # Simulated perception (1-2 seconds)
+                time.sleep(1.5)
+                return True, time.time() - start_time, None
+
+            elif action == 'manipulate':
+                # Simulated manipulation (2-3 seconds)
+                time.sleep(2.5)
+                return True, time.time() - start_time, None
+
+            else:
+                return False, time.time() - start_time, f"Unknown action: {action}"
+
+        except Exception as e:
+            return False, time.time() - start_time, str(e)
+
+    def simulate_llm_planning(self, goal: str) -> List[dict]:
+        """Simulate LLM planning (return predefined plans for demo)."""
+        # Simple plans for demo purposes
+        plans = {
+            'move': [
+                {'action': 'navigate', 'destination': 'living_room'},
+            ],
+            'pick': [
+                {'action': 'navigate', 'destination': 'kitchen'},
+                {'action': 'perceive', 'target': 'red cube'},
+                {'action': 'manipulate', 'action': 'grasp'}
+            ],
+            'bring': [
+                {'action': 'navigate', 'destination': 'kitchen'},
+                {'action': 'perceive', 'target': 'red cube'},
+                {'action': 'manipulate', 'action': 'grasp'},
+                {'action': 'navigate', 'destination': 'living_room'},
+                {'action': 'manipulate', 'action': 'release'}
+            ]
+        }
+
+        # Match goal to plan
+        for keyword, plan in plans.items():
+            if keyword in goal.lower():
+                return plan
+
+        # Default plan
+        return [
+            {'action': 'navigate', 'destination': 'user_location'},
+            {'action': 'perceive', 'target': 'any'},
+            {'action': 'manipulate', 'action': 'grasp'}
+        ]
+
+
+def main():
+    rclpy.init()
+    executor = CapstoneExecutor()
+
+    # ✅ Run capstone scenarios
+    scenarios = [
+        "Move the red cube",
+        "Bring me the blue bottle from the kitchen",
+        "Fetch the object on the table and bring it to the bedroom"
+    ]
+
+    all_results = []
+    for scenario in scenarios:
+        print(f"\n{'='*60}")
+        print(f"Executing: {scenario}")
+        print('='*60)
+
+        result = executor.execute_capstone_scenario(scenario)
+        all_results.append(result)
+
+        print(f"\n📊 Summary:")
+        print(f"  Total Duration: {result['total_duration']:.2f}s")
+        print(f"  Success Rate: {result['success_rate']:.0%}")
+        print(f"  Steps: {result['steps_completed']}/{result['steps_completed'] + result['steps_failed']}")
+
+    # ✅ Save all results to JSON
+    with open('/tmp/capstone_results.json', 'w') as f:
+        json.dump(all_results, f, indent=2)
+
+    print(f"\n✅ Results saved to /tmp/capstone_results.json")
+
+    executor.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+---
+
+## Capstone Exercise
+
+### Capstone Exercise: Execute Full Scenario, Measure Metrics, Document Failures
+
+**Objective**: Demonstrate a complete VLA system executing a multi-step autonomous task.
+
+**Task**:
+1. Launch the full VLA pipeline (all_nodes.launch.py)
+2. Execute a predefined capstone scenario ("bring red cube from kitchen to living room")
+3. Collect metrics: latency per step, total duration, success rate, any safety incidents
+4. Document any failures and their root causes
+5. Create a detailed execution report with analysis
+
+**Acceptance Criteria**:
+- [ ] Full pipeline launches without errors
+- [ ] Capstone scenario completes (success or documented failure)
+- [ ] Metrics collected: per-step latency, total duration, success rate
+- [ ] Total duration &lt;30 seconds for typical scenario
+- [ ] Success rate ≥80% on first attempt
+- [ ] Execution trace saved to JSON with all events
+- [ ] Report documents: scenario, results, failures, root causes, recommendations
+
+**Evaluation Rubric**:
+
+| Criterion | Points | Evaluation |
+|-----------|--------|-----------|
+| **Execution Success** | 50 | Scenario completes with &gt;80% success rate |
+| **Metrics Collection** | 30 | All metrics recorded; latency &lt;30s total |
+| **Documentation** | 20 | Clear report with analysis of failures |
+| **Total** | 100 | — |
+
+---
+
+## References
+
+1. Todorov, E., Erez, T., & Tassa, Y. (2012). "MuJoCo: A Physics Engine for Model-Based Control." In *2012 IEEE/RSJ International Conference on Intelligent Robots and Systems* (IROS), pp. 5026–5033. IEEE. DOI: 10.1109/IROS.2012.6386109
+
+2. ROS 2 Humble. "Executors." Core Concepts. Available: https://docs.ros.org/en/humble/Concepts/Intermediate/About-Executors.html [Accessed: January 26, 2026]
+
+3. ROS 2 Humble. "Lifecycle Nodes." Advanced Concepts. Available: https://docs.ros.org/en/humble/Concepts/Advanced/About-Lifecycle-Nodes.html [Accessed: January 26, 2026]
+
+4. NVIDIA. "Isaac Sim 2023.8 Documentation." Available: https://docs.omniverse.nvidia.com/isaacsim/latest/ [Accessed: January 26, 2026]
+
+5. Strasdat, H., Montiel, J. M. M., & Davison, A. J. (2010). "Visual SLAM: Why Bundle Adjust?" In *2011 International Conference on Robotics and Automation* (ICRA), pp. 65–72. IEEE. Available: https://arxiv.org/abs/1908.02307 [Accessed: January 26, 2026]
+
+6. Brooks, R. A. (1986). "A Robust Layered Control System for a Mobile Robot." *IEEE Journal on Robotics and Automation*, 2(1), 14–23. DOI: 10.1109/JRA.1986.1087032
+
+7. ROS 2 Navigation Stack (Nav2). "Navigation2 Documentation." Available: https://docs.nav2.org/ [Accessed: January 26, 2026]
+
+8. MoveIt 2. "MoveIt 2 Documentation." Available: https://moveit.picknik.ai/ [Accessed: January 26, 2026]
+
+---
+
+**Module**: Module 4 - Vision-Language-Action Capstone
+**Version**: 1.0
+**Last Updated**: January 26, 2026
+**Conclusion**: Congratulations on completing Module 4! You've built a sophisticated voice-controlled autonomous humanoid robot system integrating speech-to-text, LLM reasoning, and real-world execution.

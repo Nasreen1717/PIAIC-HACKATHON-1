@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "module-4-vla"
+version = "0.1.0"
+description = "Vision-Language-Action (VLA) Capstone Module for Humanoid Robotics"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Module 4 Team", email = "module4@example.com"},
+]
+keywords = [
+    "robotics",
+    "ros2",
+    "humanoid",
+    "voice",
+    "llm",
+    "autonomous",
+    "vla",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Robotics",
+]
+
+dependencies = [
+    "openai>=1.0.0",
+    "rclpy",
+    "python-dotenv>=1.0.0",
+    "numpy>=1.20.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+docs = [
+    "docusaurus>=3.0.0",
+]
+
+[project.urls]
+Repository = "https://github.com/your-org/module-4-vla"
+Issues = "https://github.com/your-org/module-4-vla/issues"
+Documentation = "https://your-org.github.io/module-4-vla/"
+
+[tool.setuptools]
+packages = ["module_4_common"]
+
+[tool.setuptools.package-data]
+module_4_common = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_mode = 3
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=module_4_common --cov-report=html --cov-report=term-missing"

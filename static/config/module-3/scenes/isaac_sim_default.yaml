@@ -1,0 +1,32 @@
+# Isaac Sim Scene Configuration
+scene:
+  id: "default_scene"
+  gravity: [0, 0, -9.81]
+  physics_timestep: 0.0083  # 120 Hz
+  renderer_type: "PathTraced"
+  render_resolution: [1920, 1080]
+  
+physics:
+  engine: "PhysX"
+  gravity_tolerance: 0.05
+  default_friction: 0.7
+  default_restitution: 0.1
+
+assets:
+  - type: "urdf"
+    path: "static/models/module-3/humanoid_robot.urdf"
+    position: [0, 0, 0.5]
+    scale: 1.0
+
+sensors:
+  camera:
+    - name: "rgb_camera"
+      link: "base_link"
+      position: [0.15, 0, 0.3]
+      resolution: [1920, 1080]
+      fov: 60
+  depth:
+    - name: "depth_camera"
+      link: "base_link"
+      position: [0.15, 0, 0.3]
+      range: [0.1, 10.0]

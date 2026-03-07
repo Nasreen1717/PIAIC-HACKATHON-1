@@ -1,0 +1,522 @@
+/**
+ * PersonalizationButton Styles
+ *
+ * Provides touch-friendly, responsive styling with smooth state transitions.
+ */
+
+.container {
+  width: 100%;
+  margin: 16px 0;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.personalizationBox {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Main Button Styling */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  background-color: #0066cc;
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.button:hover:not(:disabled) {
+  background-color: #0052a3;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* State-Specific Styling */
+.button.default {
+  background-color: #0066cc;
+}
+
+.button.loading {
+  background-color: #4d94ff;
+  opacity: 0.9;
+}
+
+.button.personalized {
+  background-color: #28a745;
+}
+
+.button.personalized:hover:not(:disabled) {
+  background-color: #218838;
+}
+
+.button.error {
+  background-color: #dc3545;
+}
+
+.button.error:hover:not(:disabled) {
+  background-color: #c82333;
+}
+
+/* Loading Spinner */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loadingText {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Status Icon */
+.statusIcon {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+/* Level Indicator */
+.levelIndicator {
+  font-size: 13px;
+  color: #28a745;
+  font-weight: 500;
+  padding: 4px 8px;
+  background-color: #f0f8f5;
+  border-radius: 4px;
+  border-left: 3px solid #28a745;
+}
+
+.levelIndicator strong {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+/* Error Message */
+.errorMessage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  color: #721c24;
+  font-size: 14px;
+}
+
+.errorIcon {
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.retryLink {
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #0066cc;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.retryLink:hover {
+  color: #0052a3;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .container {
+    width: 100%;
+    margin: 12px 0;
+  }
+
+  .button {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 16px;
+    font-size: 16px;
+  }
+
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border-width: 2px;
+  }
+
+  .levelIndicator {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-left-width: 3px;
+  }
+
+  .errorMessage {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .retryLink {
+    margin-left: 0;
+  }
+}
+
+/* Accessibility: Focus states */
+.button:focus {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
+}
+
+.retryLink:focus {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
+}
+
+/* Animation for state transitions */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.levelIndicator,
+.errorMessage {
+  animation: slideDown 0.3s ease;
+}
+
+/* Level Selection Dialog */
+.levelDialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+.levelDialogContent {
+  background-color: white;
+  border-radius: 8px;
+  padding: 32px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  animation: slideDown 0.3s ease;
+}
+
+.levelDialogContent h3 {
+  margin: 0 0 12px 0;
+  font-size: 22px;
+  color: #333;
+}
+
+.levelDialogContent p {
+  margin: 0 0 20px 0;
+  color: #666;
+  font-size: 15px;
+}
+
+.levelButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.levelButton {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  background-color: #f9f9f9;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+  text-align: left;
+}
+
+.levelButton:hover {
+  border-color: #0066cc;
+  background-color: #f0f5ff;
+  transform: translateX(4px);
+}
+
+.levelButton:active {
+  border-color: #0052a3;
+  background-color: #e6f0ff;
+}
+
+.levelDescription {
+  font-size: 13px;
+  color: #888;
+  font-weight: 400;
+}
+
+.cancelButton {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background-color: #f5f5f5;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  transition: all 0.2s ease;
+}
+
+.cancelButton:hover {
+  background-color: #e8e8e8;
+  border-color: #999;
+}
+
+@media (max-width: 768px) {
+  .levelDialogContent {
+    padding: 24px;
+  }
+
+  .levelDialogContent h3 {
+    font-size: 18px;
+  }
+
+  .levelButton {
+    padding: 14px;
+  }
+}
+
+/* Toggle Button */
+.toggleButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 1px solid #0066cc;
+  border-radius: 4px;
+  background-color: white;
+  color: #0066cc;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.toggleButton:hover {
+  background-color: #f0f5ff;
+  border-color: #0052a3;
+}
+
+.toggleButton:active {
+  background-color: #e6f0ff;
+}
+
+/* Markdown Container */
+.markdownContainer {
+  margin: 16px 0;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  max-height: 600px;
+  overflow-y: auto;
+  line-height: 1.6;
+}
+
+.markdownContainer::-webkit-scrollbar {
+  width: 8px;
+}
+
+.markdownContainer::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.markdownContainer::-webkit-scrollbar-thumb {
+  background: #0066cc;
+  border-radius: 4px;
+}
+
+.markdownContainer::-webkit-scrollbar-thumb:hover {
+  background: #0052a3;
+}
+
+/* Markdown Elements */
+.mdH1 {
+  font-size: 28px;
+  font-weight: bold;
+  margin: 20px 0 10px 0;
+  color: #333;
+}
+
+.mdH2 {
+  font-size: 22px;
+  font-weight: bold;
+  margin: 16px 0 8px 0;
+  color: #444;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 8px;
+}
+
+.mdH3 {
+  font-size: 18px;
+  font-weight: bold;
+  margin: 12px 0 6px 0;
+  color: #555;
+}
+
+.mdP {
+  margin: 10px 0;
+  color: #333;
+  line-height: 1.7;
+}
+
+.mdCodeInline {
+  background-color: #f4f4f4;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #d63384;
+}
+
+.mdCodeBlock {
+  background-color: #f4f4f4;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  padding: 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  overflow-x: auto;
+  color: #333;
+}
+
+.mdPre {
+  background-color: #2d2d2d;
+  color: #f8f8f2;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mdPre code {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
+.mdUl,
+.mdOl {
+  margin: 10px 0 10px 30px;
+  color: #333;
+}
+
+.mdLi {
+  margin: 6px 0;
+  line-height: 1.6;
+}
+
+.mdStrong {
+  font-weight: bold;
+  color: #222;
+}
+
+.mdEm {
+  font-style: italic;
+  color: #444;
+}
+
+.mdBlockquote {
+  margin: 10px 0;
+  padding-left: 15px;
+  border-left: 4px solid #0066cc;
+  color: #666;
+  font-style: italic;
+  background-color: #f0f5ff;
+}
+
+@media (max-width: 768px) {
+  .markdownContainer {
+    max-height: 400px;
+    padding: 16px;
+  }
+
+  .toggleButton {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .mdH1 {
+    font-size: 24px;
+  }
+
+  .mdH2 {
+    font-size: 19px;
+  }
+
+  .mdH3 {
+    font-size: 16px;
+  }
+}

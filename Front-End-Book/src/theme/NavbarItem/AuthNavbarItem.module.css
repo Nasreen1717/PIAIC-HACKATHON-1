@@ -1,0 +1,19 @@
+.authNavbarItem {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  position: relative;
+  z-index: 1000;
+}
+
+/* Ensure dropdown can overflow the navbar */
+:global(.navbar) .authNavbarItem {
+  overflow: visible;
+}
+
+@media (max-width: 996px) {
+  .authNavbarItem {
+    margin-left: 0;
+    margin-top: 0.5rem;
+  }
+}

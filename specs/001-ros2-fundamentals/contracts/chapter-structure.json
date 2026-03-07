@@ -1,0 +1,185 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Module 1 Chapter Structure Schema",
+  "description": "Schema defining the structure and metadata for chapters in Module 1",
+  "type": "object",
+  "required": [
+    "chapter_number",
+    "title",
+    "learning_objectives",
+    "prerequisites",
+    "estimated_time_hours",
+    "sections"
+  ],
+  "properties": {
+    "chapter_number": {
+      "type": "integer",
+      "description": "Chapter number (0, 1, 2, or 3)",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "title": {
+      "type": "string",
+      "description": "Chapter title",
+      "minLength": 5,
+      "maxLength": 100
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief chapter description",
+      "minLength": 20,
+      "maxLength": 500
+    },
+    "learning_objectives": {
+      "type": "array",
+      "description": "Learning objectives students should achieve",
+      "minItems": 3,
+      "maxItems": 10,
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 200
+      }
+    },
+    "prerequisites": {
+      "type": "array",
+      "description": "Prerequisites chapters or concepts",
+      "items": {
+        "type": "string"
+      }
+    },
+    "estimated_time_hours": {
+      "type": "number",
+      "description": "Estimated time to complete chapter in hours",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "difficulty_level": {
+      "type": "string",
+      "description": "Difficulty level",
+      "enum": ["beginner", "intermediate", "advanced"]
+    },
+    "target_audience": {
+      "type": "array",
+      "description": "Target audience for this chapter",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sections": {
+      "type": "array",
+      "description": "Chapter sections",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["title", "subsections"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 100
+          },
+          "subsections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "code_examples": {
+            "type": "array",
+            "description": "Code examples in this section",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "code_examples": {
+      "type": "array",
+      "description": "List of code examples in chapter",
+      "items": {
+        "type": "string",
+        "pattern": "^\\d+-[a-z-]+\\.(py|sh|msg|urdf|xml)$"
+      }
+    },
+    "exercises": {
+      "type": "array",
+      "description": "Exercises associated with chapter",
+      "items": {
+        "type": "string"
+      }
+    },
+    "quiz": {
+      "type": "object",
+      "description": "Chapter formative assessment quiz",
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "question_count": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 20
+        }
+      }
+    },
+    "citations": {
+      "type": "array",
+      "description": "IEEE-formatted citations used in chapter",
+      "items": {
+        "type": "string"
+      }
+    },
+    "keywords": {
+      "type": "array",
+      "description": "Key terms and concepts",
+      "items": {
+        "type": "string"
+      }
+    },
+    "success_criteria": {
+      "type": "array",
+      "description": "Success criteria for completing chapter",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "examples": [
+    {
+      "chapter_number": 1,
+      "title": "ROS 2 Architecture: Nodes and Topics",
+      "description": "Understand ROS 2 fundamentals including nodes, topics, and pub/sub communication",
+      "learning_objectives": [
+        "Understand ROS 2 node architecture",
+        "Create and run publisher and subscriber nodes",
+        "Use ROS 2 CLI tools for introspection"
+      ],
+      "prerequisites": ["Chapter 0: Setup"],
+      "estimated_time_hours": 8,
+      "difficulty_level": "beginner",
+      "target_audience": ["Students with Python background"],
+      "sections": [
+        {
+          "title": "What is ROS 2?",
+          "subsections": ["History", "Use cases", "Comparison to ROS 1"]
+        },
+        {
+          "title": "Nodes and Topics",
+          "subsections": ["Node definition", "Topic basics", "Pub/Sub pattern"]
+        }
+      ],
+      "code_examples": [
+        "1-hello-world-pub.py",
+        "1-hello-world-sub.py",
+        "1-topic-introspection.sh"
+      ],
+      "exercises": ["1-1-create-publisher", "1-2-modify-subscriber"],
+      "quiz": {
+        "filename": "quiz-1.md",
+        "question_count": 12
+      }
+    }
+  ]
+}

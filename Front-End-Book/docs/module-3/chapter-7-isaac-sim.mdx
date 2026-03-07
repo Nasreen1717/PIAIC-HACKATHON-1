@@ -1,0 +1,819 @@
+---
+title: Chapter 7 - Isaac Sim Photorealistic Simulation & Synthetic Data
+sidebar_label: Chapter 7 Isaac Sim
+sidebar_position: 1
+---
+
+# Chapter 7: Isaac Sim - Photorealistic Simulation & Synthetic Data
+
+## Learning Objectives
+
+By the end of this chapter, you will:
+
+- ✅ Install and validate Isaac Sim 2023.8+ on Ubuntu 22.04 with full GPU support
+- ✅ Understand USD (Universal Scene Description) format for 3D asset representation
+- ✅ Convert URDF robot models to USD and import into Isaac Sim with physics
+- ✅ Configure and tune PhysX physics engine parameters for realistic simulation
+- ✅ Deploy virtual sensors (RGB cameras, depth sensors, IMU) with proper calibration
+- ✅ Generate large-scale synthetic training datasets with semantic annotations
+- ✅ Export datasets in standard formats (COCO, Pascal VOC) for ML training
+- ✅ Troubleshoot common issues and optimize simulation performance
+
+**Estimated time**: 12-15 hours
+**Difficulty**: Intermediate
+**Prerequisites**: Chapter 6 (Module 2 completion), Linux terminal proficiency, basic Python knowledge
+
+---
+
+## 1. Isaac Sim Architecture and Installation
+
+### 1.1 What is Isaac Sim?
+
+**Isaac Sim** is NVIDIA's photorealistic simulation platform built on the Omniverse engine. It enables:
+
+- **Physics-accurate robotics simulation** using NVIDIA PhysX 5.x engine
+- **Photorealistic rendering** with RTX ray tracing for realistic perception training
+- **GPU-accelerated synthetic data generation** for computer vision datasets
+- **ROS 2 integration** for seamless deployment of perception and control algorithms
+- **Domain randomization** to close the sim-to-real gap
+
+Isaac Sim replaces Gazebo for high-fidelity robotics applications requiring photorealistic data or physics accuracy beyond traditional simulators.
+
+### 1.2 System Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| **OS** | Ubuntu 22.04 LTS | Ubuntu 22.04.3+ |
+| **GPU** | RTX 3070 (8GB VRAM) | RTX 4070 Ti (12GB+ VRAM) |
+| **VRAM** | 8 GB | 16+ GB |
+| **CPU** | 8 cores (2.5 GHz) | 16 cores (3.5+ GHz) |
+| **Storage** | 100 GB available | 200+ GB (SSD recommended) |
+| **NVIDIA Driver** | 525+ | 545+ |
+| **CUDA** | 12.0 | 12.x |
+
+**Cloud Alternatives** (if no local GPU):
+- AWS g5.2xlarge: 1x NVIDIA L40 GPU, 8 vCPU, $1.69/hour
+- NVIDIA Isaac Cloud: Pre-configured, on-demand simulation
+- Google Cloud A100: Maximum performance for large datasets
+
+### 1.3 Installation Steps
+
+#### Step 1: Verify NVIDIA Environment
+
+```bash
+# Check NVIDIA driver version (should be 525+)
+nvidia-smi
+
+# Check CUDA installation
+nvcc --version
+
+# Set environment variables
+export CUDA_HOME=/usr/local/cuda-12.0
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+```
+
+#### Step 2: Install NVIDIA Omniverse
+
+Download Omniverse Launcher from [https://www.nvidia.com/en-us/omniverse/](https://www.nvidia.com/en-us/omniverse/):
+
+```bash
+# Extract and run installer
+chmod +x omniverse-launcher-linux.run
+./omniverse-launcher-linux.run
+
+# In Launcher UI: Install → Isaac Sim 2023.8.0
+```
+
+#### Step 3: Validate Installation
+
+```bash
+# Check Isaac Sim installation
+ls ~/.omniverse/pkg/prod-isaacsim-4.0.0/
+
+# Test GPU accessibility
+python3 -c "import torch; print(torch.cuda.is_available())"
+```
+
+#### Step 4: ROS 2 Integration (Optional)
+
+```bash
+# Install Isaac ROS packages
+sudo apt-get install ros-humble-isaac-ros-*
+
+# Source ROS environment
+source /opt/ros/humble/setup.bash
+```
+
+### 1.4 GPU Validation for Simulation
+
+Create `validate-gpu.py`:
+
+```python
+#!/usr/bin/env python3
+"""Validate GPU for Isaac Sim simulation."""
+
+import subprocess
+import torch
+import pycuda.driver as cuda
+
+def check_gpu():
+    """✅ Validate GPU compatibility."""
+    print("🔍 GPU Validation Report:")
+
+    # CUDA availability
+    print(f"  • CUDA Available: {torch.cuda.is_available()}")
+    print(f"  • GPU Count: {torch.cuda.device_count()}")
+
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            props = torch.cuda.get_device_properties(i)
+            print(f"  • GPU {i}: {props.name}")
+            print(f"    - Memory: {props.total_memory / 1e9:.2f} GB")
+            print(f"    - Compute Capability: {props.major}.{props.minor}")
+
+    # Driver info
+    result = subprocess.run(['nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader'],
+                          capture_output=True, text=True)
+    print(f"  • Driver Version: {result.stdout.strip()}")
+
+    # PyCUDA check
+    try:
+        cuda.init()
+        device = cuda.Device(0)
+        print(f"  • PyCUDA Device: {device.name().decode()}")
+    except Exception as e:
+        print(f"  ⚠️  PyCUDA Error: {e}")
+
+    print("\n✅ GPU validation complete!")
+
+if __name__ == '__main__':
+    check_gpu()
+```
+
+---
+
+## 2. URDF to USD Conversion Pipeline
+
+### 2.1 Understanding USD Format
+
+**USD (Universal Scene Description)** is Pixar's open standard for describing 3D scenes:
+
+```
+URDF (Robot Description)
+    ↓
+    └─→ USD (Universal Scene Description)
+            ├─ Mesh references (.obj, .usd)
+            ├─ Physics properties (mass, friction)
+            ├─ Articulation (joints, links)
+            └─ Collision shapes (primitives, meshes)
+```
+
+**USD Structure Example**:
+
+```usda
+#usda 1.0
+
+def Xform "root_link" {
+    rel physics:rigidBody = </root_link/RigidBodySchema>
+
+    def Mesh "collision_mesh" {
+        asset inputs:chdir = @./meshes/collision.obj@
+        bool collision:approximateConvexDecomp = true
+    }
+
+    def RigidBodySchema "RigidBodySchema" {
+        float3 physics:angularVelocity = (0, 0, 0)
+        float3 physics:velocity = (0, 0, 0)
+        float physics:mass = 1.0
+    }
+
+    def Joint "root_to_joint1" {
+        float[] physics:axis = [0, 0, 1]  # Z-axis rotation
+        float physics:lowerLimit = -3.14
+        float physics:upperLimit = 3.14
+    }
+}
+```
+
+### 2.2 Conversion Process
+
+#### Step 1: Prepare URDF
+
+Ensure URDF includes:
+- Correct mesh file paths (relative or absolute)
+- Mass and inertia definitions for all links
+- Valid collision geometry
+
+```xml
+<robot name="humanoid">
+  <link name="base_link">
+    <inertial>
+      <mass value="20.0"/>
+      <inertia ixx="0.5" ixy="0" ixz="0" iyy="0.5" iyz="0" izz="0.5"/>
+    </inertial>
+    <visual>
+      <mesh filename="package://humanoid_description/meshes/base_link.obj"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://humanoid_description/meshes/base_link.obj"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>
+```
+
+#### Step 2: Convert with Isaac Sim Script
+
+```python
+#!/usr/bin/env python3
+"""Convert URDF to USD."""
+
+from omni.isaac.core.utils.stage import add_reference_to_stage
+from omni.isaac.core.utils.nucleus import find_nucleus_server
+import omni
+
+async def convert_urdf_to_usd(urdf_path: str, usd_output_path: str):
+    """🔄 Convert URDF to USD format."""
+
+    # Import URDF
+    from omni.importer.urdf import USDHelpers
+
+    importer = USDHelpers()
+    importer.convert_urdf_to_usd(
+        urdf_file_path=urdf_path,
+        usd_file_path=usd_output_path,
+        # Physics configuration
+        fix_base=False,  # Allow base link to move
+        invert_y_z=False,
+        decompose_meshes=True,  # Split complex meshes
+        self_collision=False,
+        merge_fixed_joints=True
+    )
+
+    print(f"✅ Converted: {urdf_path} → {usd_output_path}")
+
+# Usage
+convert_urdf_to_usd(
+    "/path/to/robot.urdf",
+    "/path/to/robot.usd"
+)
+```
+
+### 2.3 Physics Configuration in USD
+
+**Joint Articulation** (example):
+
+```python
+from omni.isaac.core.prims import RigidPrim, ArticulationPrim
+
+# Load USD with articulation
+robot = ArticulationPrim(
+    prim_path="/World/robot",
+    name="robot"
+)
+
+# Access joint
+joint = robot.get_joint_position_targets()
+robot.set_joint_position_targets(joint_positions=[0.5, 0.3, 0.2])
+
+# Set joint limits
+for joint in robot.get_joints():
+    joint.set_limits(
+        lower_limit=-3.14,
+        upper_limit=3.14,
+        effort=100,
+        velocity=1.0
+    )
+```
+
+**Collision Mesh Handling**:
+- Visual meshes: High-poly for rendering (1M+ triangles OK)
+- Collision meshes: Low-poly for physics (~10k triangles per link)
+- Decompose complex meshes into convex shapes for stability
+
+---
+
+## 3. Physics Engine Configuration
+
+### 3.1 PhysX Engine Parameters
+
+Isaac Sim uses **NVIDIA PhysX 5.x**, configurable at multiple levels:
+
+```python
+from omni.isaac.core.simulation_context import SimulationContext
+
+# Configure global physics
+sim_context = SimulationContext(
+    physics_dt=0.01,  # Simulation timestep (10ms)
+    rendering_dt=0.016,  # Render timestep (60fps)
+    backend="cuda"  # Use GPU acceleration
+)
+
+# Access physics scene
+physics_scene = sim_context.get_physics_context()
+
+# Set gravity
+physics_scene.set_gravity(9.81)
+
+# Configure solver iterations
+physics_scene.set_solver_iterations(4)  # Default: 4, Higher = more stable
+physics_scene.set_solver_velocity_iterations(1)
+
+# Enable GPU acceleration
+physics_scene.enable_gpu_dynamics(True)
+```
+
+### 3.2 Material Properties
+
+**Friction and Restitution**:
+
+```python
+from omni.isaac.core.materials import PhysicsMaterial
+
+# Define material
+material = PhysicsMaterial(
+    static_friction=0.7,      # 0.0=slippery, 1.0=sticky
+    dynamic_friction=0.5,
+    restitution=0.2           # 0.0=no bounce, 1.0=perfect bounce
+)
+
+# Apply to rigid body
+prim = stage.GetPrimAtPath("/World/robot/base_link")
+prim.GetAttribute("physics:material").Set(material)
+```
+
+**Recommended Values by Surface**:
+
+| Surface Type | Static Friction | Dynamic Friction | Restitution |
+|--------------|-----------------|------------------|-------------|
+| **Wood on Wood** | 0.5-0.6 | 0.4-0.5 | 0.3-0.5 |
+| **Metal on Metal** | 0.3-0.4 | 0.2-0.3 | 0.1-0.3 |
+| **Rubber on Floor** | 0.7-0.9 | 0.6-0.8 | 0.1-0.2 |
+| **Humanoid Feet** | 0.8 | 0.7 | 0.1 |
+
+### 3.3 Timestep and Stability
+
+```python
+# Timestep selection rules:
+# 1. Lower timestep = more accurate but slower
+# 2. Rule of thumb: dt < 0.01 for most robots
+# 3. For fast motion: dt = 0.001 (1kHz)
+
+physics_scene.set_physics_dt(0.005)  # 5ms = 200 Hz
+
+# Convergence iterations (higher = more stable)
+physics_scene.set_solver_iterations(8)
+
+# For soft/compliant bodies:
+physics_scene.enable_stabilization_iterations(True)
+```
+
+**Physics Divergence Detection**:
+
+```python
+def check_physics_stability(sim, max_velocity=100.0):
+    """⚠️ Detect unstable physics."""
+    for prim in sim.get_all_physics_bodies():
+        vel = prim.get_linear_velocity()
+        if (vel ** 2).sum() ** 0.5 > max_velocity:
+            print(f"⚠️  Physics divergence detected on {prim.name}")
+            print(f"   Velocity: {vel} (exceeds {max_velocity})")
+            return False
+    return True
+```
+
+---
+
+## 4. Virtual Sensor Configuration
+
+### 4.1 RGB Camera Simulation
+
+```python
+from omni.isaac.sensor import Camera
+
+# Create virtual camera
+camera = Camera(
+    prim_path="/World/Camera",
+    position=[0.0, 0.5, 1.0],
+    orientation=[0.707, 0, 0.707, 0],  # 90° rotation
+    resolution=(1920, 1080),
+    sensor_tick=0  # Update every frame
+)
+
+# Configure camera intrinsics
+intrinsic_matrix = [
+    [912, 0, 960],      # fx, 0, cx
+    [0, 912, 540],      # 0, fy, cy
+    [0, 0, 1]           # 0, 0, 1
+]
+
+# Set focal length
+camera.set_focal_length(20)  # mm
+
+# Enable different data types
+camera.enable_depth()
+camera.enable_segmentation()
+camera.enable_normals()
+camera.enable_motion_vectors()
+
+# Get data in render loop
+rgb_image = camera.get_rgba()  # Shape: (H, W, 4)
+depth = camera.get_depth()      # Shape: (H, W, 1)
+seg = camera.get_semantic_segmentation()  # Shape: (H, W, 4)
+```
+
+### 4.2 Depth Sensor Configuration
+
+**Depth sensor types**:
+- Stereo vision: Matches feature points between two cameras
+- Structured light: Projects patterns, measures phase shift
+- Time-of-flight: Measures light roundtrip time
+
+```python
+from omni.isaac.sensor import DepthCamera
+
+depth_camera = DepthCamera(
+    prim_path="/World/DepthCamera",
+    position=[0, 0, 1],
+    resolution=(640, 480),
+    min_range=0.1,      # meters
+    max_range=5.0,      # meters
+    depth_type="linear_depth"  # or "disparity"
+)
+
+# Render and get depth
+depth_map = depth_camera.get_depth()  # Shape: (480, 640)
+
+# Convert to point cloud
+import numpy as np
+
+def depth_to_pointcloud(depth, intrinsics):
+    """💾 Convert depth map to 3D points."""
+    h, w = depth.shape
+    fx, fy, cx, cy = intrinsics['fx'], intrinsics['fy'], intrinsics['cx'], intrinsics['cy']
+
+    x = np.arange(w)
+    y = np.arange(h)
+    xx, yy = np.meshgrid(x, y)
+
+    z = depth
+    x = (xx - cx) * z / fx
+    y = (yy - cy) * z / fy
+
+    points = np.stack([x, y, z], axis=-1).reshape(-1, 3)
+    return points[~np.isnan(points).any(axis=1)]
+```
+
+### 4.3 IMU Simulation
+
+```python
+from omni.isaac.sensor import IMUSensor
+
+imu = IMUSensor(
+    prim_path="/World/IMU",
+    translation=[0, 0, 0.5],
+    frequency=200  # Hz
+)
+
+# In simulation loop
+imu_reading = imu.get_sensor_reading()
+print(f"Acceleration: {imu_reading.lin_acc}")
+print(f"Angular velocity: {imu_reading.ang_vel}")
+print(f"Magnetometer: {imu_reading.mag}")
+
+# Sensor noise model (realistic)
+class IMUNoise:
+    def __init__(self, accel_noise=0.01, gyro_noise=0.001):
+        self.accel_noise = accel_noise
+        self.gyro_noise = gyro_noise
+
+    def add_noise(self, accel, gyro):
+        accel += np.random.normal(0, self.accel_noise, accel.shape)
+        gyro += np.random.normal(0, self.gyro_noise, gyro.shape)
+        return accel, gyro
+```
+
+---
+
+## 5. Synthetic Data Generation Pipeline
+
+### 5.1 Dataset Generation Workflow
+
+```
+Setup Scene
+    ↓
+Randomize (domain randomization)
+    ├─ Object positions, scales, materials
+    ├─ Lighting conditions, camera parameters
+    ├─ Physics parameters (friction, mass)
+    ↓
+Run Simulation
+    ├─ Physics step
+    ├─ Capture sensor data (RGB, depth, semantic)
+    ├─ Record pose ground truth
+    ↓
+Annotate
+    ├─ 2D bounding boxes
+    ├─ 3D object poses
+    ├─ Semantic segmentation
+    ↓
+Export
+    └─ COCO format, Pascal VOC, or custom
+```
+
+### 5.2 Large-Scale Data Generation
+
+```python
+#!/usr/bin/env python3
+"""Generate 1000+ synthetic images efficiently."""
+
+from omni.isaac.core.simulation_context import SimulationContext
+import numpy as np
+from pathlib import Path
+import json
+from PIL import Image
+
+class SyntheticDataGenerator:
+    def __init__(self, num_frames=1000):
+        self.num_frames = num_frames
+        self.frame_count = 0
+        self.dataset_dir = Path("./synthetic_dataset")
+        self.dataset_dir.mkdir(exist_ok=True)
+
+        self.sim_context = SimulationContext(physics_dt=0.01, backend="cuda")
+        self.camera = self._setup_camera()
+
+    def _setup_camera(self):
+        """Initialize camera with optimal settings for data generation."""
+        from omni.isaac.sensor import Camera
+
+        camera = Camera(
+            prim_path="/World/GeneratorCamera",
+            resolution=(1920, 1080),
+            sensor_tick=0
+        )
+        return camera
+
+    def randomize_scene(self):
+        """🎲 Apply domain randomization."""
+        # Randomize lighting
+        light_intensity = np.random.uniform(0.5, 2.0)
+
+        # Randomize object positions
+        for obj in self.scene_objects:
+            pos = np.random.uniform(-1, 1, 3)
+            obj.set_world_poses(pos)
+
+        # Randomize material properties
+        for prim in self.scene_materials:
+            friction = np.random.uniform(0.3, 0.9)
+            restitution = np.random.uniform(0.0, 0.5)
+
+    def capture_frame(self):
+        """📸 Capture annotated frame."""
+        self.sim_context.step()
+
+        # Get camera data
+        rgb = self.camera.get_rgba()[:, :, :3]
+        depth = self.camera.get_depth()
+        segmentation = self.camera.get_semantic_segmentation()
+
+        # Save image
+        frame_id = str(self.frame_count).zfill(6)
+        img_path = self.dataset_dir / f"{frame_id}_rgb.png"
+        Image.fromarray(rgb).save(img_path)
+
+        # Save depth
+        np.save(self.dataset_dir / f"{frame_id}_depth.npy", depth)
+
+        # Generate annotations
+        annotations = self._generate_annotations(segmentation)
+        with open(self.dataset_dir / f"{frame_id}_annotations.json", 'w') as f:
+            json.dump(annotations, f)
+
+        self.frame_count += 1
+        if self.frame_count % 100 == 0:
+            print(f"✅ Generated {self.frame_count}/{self.num_frames} frames")
+
+    def _generate_annotations(self, segmentation):
+        """Generate bounding boxes and masks."""
+        annotations = {
+            "objects": [],
+            "frame_id": self.frame_count
+        }
+        # Implementation: extract bounding boxes from segmentation mask
+        return annotations
+
+    def generate_dataset(self):
+        """🚀 Generate full dataset."""
+        print(f"Generating {self.num_frames} frames...")
+
+        for i in range(self.num_frames):
+            self.randomize_scene()
+            self.capture_frame()
+
+        print(f"✅ Dataset complete: {self.dataset_dir}")
+        self._export_coco_format()
+
+    def _export_coco_format(self):
+        """Export in COCO format for ML training."""
+        coco_data = {
+            "images": [],
+            "annotations": [],
+            "categories": [
+                {"id": 1, "name": "object"},
+                {"id": 2, "name": "background"}
+            ]
+        }
+        # Implementation: convert frames to COCO format
+        pass
+
+# Usage
+if __name__ == '__main__':
+    generator = SyntheticDataGenerator(num_frames=1000)
+    generator.generate_dataset()
+```
+
+### 5.3 Export Formats
+
+**COCO Format** (MS COCO dataset standard):
+
+```json
+{
+  "images": [
+    {
+      "id": 1,
+      "file_name": "000001_rgb.png",
+      "height": 1080,
+      "width": 1920
+    }
+  ],
+  "annotations": [
+    {
+      "id": 1,
+      "image_id": 1,
+      "category_id": 1,
+      "bbox": [100, 150, 200, 300],
+      "area": 60000,
+      "iscrowd": 0,
+      "segmentation": [[...]]
+    }
+  ],
+  "categories": [
+    {"id": 1, "name": "humanoid", "supercategory": "robot"}
+  ]
+}
+```
+
+---
+
+## 6. Performance Optimization
+
+### 6.1 GPU Acceleration
+
+```python
+# Enable CUDA for physics
+sim_context = SimulationContext(
+    physics_dt=0.01,
+    backend="cuda"  # Much faster than CPU
+)
+
+# Monitor GPU usage
+import pynvml
+pynvml.nvmlInit()
+handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+print(f"GPU Memory: {mem_info.used / 1e9:.2f} GB / {mem_info.total / 1e9:.2f} GB")
+```
+
+### 6.2 Headless Simulation
+
+For data generation without GUI:
+
+```bash
+# Run Isaac Sim headless
+/path/to/isaacSim.sh --headless --python script.py
+```
+
+### 6.3 Batching
+
+Generate multiple scenes in parallel:
+
+```python
+from omni.isaac.core.simulation_context import SimulationContext
+import ray
+
+@ray.remote(num_gpus=0.25)  # Share GPU across 4 workers
+def generate_batch(batch_id):
+    sim = SimulationContext(physics_dt=0.01)
+    # Generate dataset for this batch
+    for i in range(250):
+        # Frame generation logic
+        pass
+    return f"Batch {batch_id} complete"
+
+# Run in parallel
+futures = [generate_batch.remote(i) for i in range(4)]
+results = ray.get(futures)
+```
+
+---
+
+## 7. Troubleshooting Common Issues
+
+### 7.1 GPU Memory Errors
+
+```
+Error: CUDA out of memory
+```
+
+**Solution**:
+1. Reduce camera resolution (1920×1080 → 1280×720)
+2. Decrease scene complexity (fewer objects, simpler meshes)
+3. Enable GPU memory garbage collection: `physics_scene.enable_memory_optimization(True)`
+
+### 7.2 Physics Divergence
+
+```
+Bodies flying apart, extreme velocities
+```
+
+**Solution**:
+1. Reduce timestep: 0.01 → 0.005
+2. Increase solver iterations: 4 → 8
+3. Check joint limits and friction values
+4. Disable self-collision for low-mass links
+
+### 7.3 Mesh Import Failures
+
+```
+Could not load mesh file
+```
+
+**Solution**:
+1. Verify mesh file path is absolute or relative to URDF package
+2. Use supported formats: .obj, .glb, .fbx
+3. Ensure mesh is non-degenerate (check with Meshlab)
+
+---
+
+## Summary
+
+| Concept | Definition | Use When |
+|---------|-----------|----------|
+| **USD** | Universal Scene Description format | Representing 3D assets in Isaac Sim |
+| **URDF→USD** | Conversion pipeline for robot models | Importing URDF robots into simulation |
+| **Physics Tuning** | Calibrating gravity, friction, restitution | Matching simulation to real physics |
+| **Virtual Sensors** | RGB/depth/IMU cameras in simulation | Training perception algorithms |
+| **Synthetic Data** | Generated annotated images | Large-scale ML training without hardware |
+| **Domain Randomization** | Random object/lighting/physics variation | Improving sim-to-real transfer |
+| **GPU Acceleration** | CUDA-enabled physics and rendering | Real-time 1000+ FPS simulation |
+
+---
+
+## Key Takeaways
+
+1. **Isaac Sim replaces Gazebo** for photorealistic simulation and GPU-accelerated physics
+2. **USD is the standard format** for 3D scenes, replacing XML-based descriptions
+3. **Physics tuning is critical** - small changes to friction/restitution dramatically affect behavior
+4. **Synthetic data scales ML training** - generate 1000+ labeled images per day with GPU
+5. **Domain randomization bridges sim-to-real** - randomize materials, lighting, physics parameters
+6. **GPU acceleration is essential** - CUDA backend enables real-time or faster-than-real-time simulation
+7. **Validation is mandatory** - always check GPU/driver versions before large jobs
+
+---
+
+## Next Steps
+
+- Run Example 7.1: Validate your GPU setup
+- Complete Exercise 7.1: Tune a robot's physics parameters
+- Move to Chapter 8: Deploy Isaac ROS for real-time perception
+- Explore Chapter 9: Extend navigation to bipedal humanoids
+
+---
+
+## Glossary References
+
+- **USD**: See [Glossary: Universal Scene Description](./glossary.md#usd-universal-scene-description)
+- **URDF**: See [Glossary: URDF](./glossary.md#urdf-unified-robot-description-format)
+- **PhysX**: See [Glossary: PhysX](./glossary.md#physx-physics-engine)
+- **Synthetic Data**: See [Glossary: Synthetic Data](./glossary.md#synthetic-data-generation)
+- **Domain Randomization**: See [Glossary: Domain Randomization](./glossary.md#domain-randomization)
+
+---
+
+## Citations
+
+1. NVIDIA. "Isaac Sim Documentation." *NVIDIA Developer*, 2024. [Online]. Available: https://docs.omniverse.nvidia.com/isaacsim/latest/. [Accessed: Jan. 26, 2026].
+
+2. Pixar Animation Studios. "USD: Universal Scene Description." [Online]. Available: https://graphics.pixar.com/usd/. [Accessed: Jan. 26, 2026].
+
+3. NVIDIA. "NVIDIA PhysX SDK." [Online]. Available: https://developer.nvidia.com/physx-sdk. [Accessed: Jan. 26, 2026].
+
+4. Tobin, J., et al. "Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World." *IEEE/RSJ IROS*, 2017. [Online]. Available: https://arxiv.org/abs/1703.06907. [Accessed: Jan. 26, 2026].
+
+---
+
+*Chapter 7: Isaac Sim - Photorealistic Simulation & Synthetic Data* | Version 1.0.0 | Module 3 - Advanced Robotics

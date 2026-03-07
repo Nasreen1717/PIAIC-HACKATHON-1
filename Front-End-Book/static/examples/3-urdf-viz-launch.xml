@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<!--
+  ROS 2 Launch File for URDF Visualization in RViz2
+
+  This launch file:
+  1. Loads a URDF file and publishes it as /robot_description parameter
+  2. Starts the robot_state_publisher to publish transforms
+  3. Starts RViz2 for visualization
+  4. Optionally publishes joint state updates (for animation)
+
+  Usage:
+    ros2 launch 3-urdf-viz-launch.xml urdf_file:=path/to/humanoid.urdf
+
+  Example:
+    ros2 launch 3-urdf-viz-launch.xml urdf_file:=static/examples/3-simple-humanoid.urdf
+-->
+
+<launch>
+  <!-- Argument: Path to URDF file -->
+  <arg name="urdf_file" default="3-simple-humanoid.urdf"
+       description="Path to URDF file to visualize"/>
+
+  <!-- Argument: RViz2 config file (optional) -->
+  <arg name="rviz_config" default=""
+       description="Path to RViz2 config file (empty for default)"/>
+
+  <!-- Load URDF from file and publish as parameter -->
+  <param name="robot_description" command="cat $(var urdf_file)"/>
+
+  <!-- Robot State Publisher: Publishes transforms from URDF -->
+  <node pkg="robot_state_publisher" exec="robot_state_publisher"
+        output="screen">
+    <param name="robot_description"
+           command="cat $(var urdf_file)"/>
+  </node>
+
+  <!-- Static Transform Publisher: World to base link -->
+  <!-- This fixes the robot's position in the world frame -->
+  <node pkg="tf2_ros" exec="static_transform_publisher"
+        args="0 0 0 0 0 0 world torso"
+        output="screen"/>
+
+  <!-- Joint State Publisher: Publishes default joint states -->
+  <!-- Allows interactive joint manipulation in RViz2 -->
+  <node pkg="joint_state_publisher_gui" exec="joint_state_publisher_gui"
+        output="screen"/>
+
+  <!-- RViz2: Visualization tool -->
+  <node pkg="rviz2" exec="rviz2"
+        name="rviz2"
+        output="screen">
+    <!-- If config file provided, use it; otherwise use default -->
+    <param if="$(var rviz_config)"
+           name="display_config"
+           value="$(var rviz_config)"/>
+  </node>
+
+</launch>

@@ -1,0 +1,224 @@
+<?xml version="1.0"?>
+<robot name="simple_humanoid">
+  <!--
+    Simple Humanoid Robot URDF
+    - Torso (main body)
+    - Head (connected to torso with fixed joint)
+    - Left and right arms (revolute shoulder joints)
+    - Left and right legs (revolute hip joints)
+
+    Total: 5 links, 5 joints (including fixed base)
+  -->
+
+  <!-- ============= LINKS ============= -->
+
+  <!-- World reference frame (fixed base) -->
+  <link name="world"/>
+
+  <!-- Torso: Main body of the robot -->
+  <link name="torso">
+    <visual>
+      <geometry>
+        <box size="0.3 0.2 0.5"/>
+      </geometry>
+      <origin xyz="0 0 0.25" rpy="0 0 0"/>
+      <material name="torso_color">
+        <color rgba="1 0 0 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.3 0.2 0.5"/>
+      </geometry>
+      <origin xyz="0 0 0.25" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="5.0"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.05"/>
+    </inertial>
+  </link>
+
+  <!-- Head: Spherical shape mounted on top of torso -->
+  <link name="head">
+    <visual>
+      <geometry>
+        <sphere radius="0.1"/>
+      </geometry>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <material name="head_color">
+        <color rgba="1 0.8 0.6 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <sphere radius="0.1"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.5"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+
+  <!-- Left Arm: Cylindrical limb -->
+  <link name="left_arm">
+    <visual>
+      <geometry>
+        <cylinder radius="0.04" length="0.4"/>
+      </geometry>
+      <origin xyz="0 0 -0.2" rpy="0 0 0"/>
+      <material name="arm_color">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.04" length="0.4"/>
+      </geometry>
+      <origin xyz="0 0 -0.2" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="1.5"/>
+      <inertia ixx="0.02" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <!-- Right Arm: Cylindrical limb (mirrored) -->
+  <link name="right_arm">
+    <visual>
+      <geometry>
+        <cylinder radius="0.04" length="0.4"/>
+      </geometry>
+      <origin xyz="0 0 -0.2" rpy="0 0 0"/>
+      <material name="arm_color">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.04" length="0.4"/>
+      </geometry>
+      <origin xyz="0 0 -0.2" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="1.5"/>
+      <inertia ixx="0.02" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <!-- Left Leg: Box-shaped limb -->
+  <link name="left_leg">
+    <visual>
+      <geometry>
+        <box size="0.1 0.1 0.5"/>
+      </geometry>
+      <origin xyz="0 0 -0.25" rpy="0 0 0"/>
+      <material name="leg_color">
+        <color rgba="0.2 0.2 0.2 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.1 0.1 0.5"/>
+      </geometry>
+      <origin xyz="0 0 -0.25" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="2.0"/>
+      <inertia ixx="0.05" ixy="0" ixz="0" iyy="0.05" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+
+  <!-- Right Leg: Box-shaped limb (mirrored) -->
+  <link name="right_leg">
+    <visual>
+      <geometry>
+        <box size="0.1 0.1 0.5"/>
+      </geometry>
+      <origin xyz="0 0 -0.25" rpy="0 0 0"/>
+      <material name="leg_color">
+        <color rgba="0.2 0.2 0.2 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.1 0.1 0.5"/>
+      </geometry>
+      <origin xyz="0 0 -0.25" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="2.0"/>
+      <inertia ixx="0.05" ixy="0" ixz="0" iyy="0.05" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+
+  <!-- ============= JOINTS ============= -->
+
+  <!-- Fixed joint connecting world to torso (base) -->
+  <joint name="base_torso_joint" type="fixed">
+    <parent link="world"/>
+    <child link="torso"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Neck joint: Connect head to torso -->
+  <joint name="neck_joint" type="revolute">
+    <parent link="torso"/>
+    <child link="head"/>
+    <origin xyz="0 0 0.5" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" velocity="2.0" effort="5"/>
+    <dynamics damping="0.1" friction="0.0"/>
+  </joint>
+
+  <!-- Left Shoulder joint: Connect left arm to torso -->
+  <joint name="left_shoulder_joint" type="revolute">
+    <parent link="torso"/>
+    <child link="left_arm"/>
+    <!-- Position: right side of torso, upper part -->
+    <origin xyz="0.15 0.15 0.4" rpy="0 0 0"/>
+    <!-- Rotate around Y-axis (raise/lower arm) -->
+    <axis xyz="0 1 0"/>
+    <!-- Limits: ±90 degrees, 2 rad/s max speed, 10 N·m max torque -->
+    <limit lower="-1.57" upper="1.57" velocity="2.0" effort="10"/>
+    <dynamics damping="0.1" friction="0.0"/>
+  </joint>
+
+  <!-- Right Shoulder joint: Connect right arm to torso (mirrored) -->
+  <joint name="right_shoulder_joint" type="revolute">
+    <parent link="torso"/>
+    <child link="right_arm"/>
+    <!-- Position: left side of torso, upper part (mirrored Y) -->
+    <origin xyz="-0.15 0.15 0.4" rpy="0 0 0"/>
+    <!-- Rotate around Y-axis (raise/lower arm) -->
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.57" upper="1.57" velocity="2.0" effort="10"/>
+    <dynamics damping="0.1" friction="0.0"/>
+  </joint>
+
+  <!-- Left Hip joint: Connect left leg to torso -->
+  <joint name="left_hip_joint" type="revolute">
+    <parent link="torso"/>
+    <child link="left_leg"/>
+    <!-- Position: front-right side of torso base -->
+    <origin xyz="0.1 0.05 0" rpy="0 0 0"/>
+    <!-- Rotate around X-axis (forward/backward motion) -->
+    <axis xyz="1 0 0"/>
+    <!-- Limits: ±45 degrees -->
+    <limit lower="-0.785" upper="0.785" velocity="1.5" effort="15"/>
+    <dynamics damping="0.1" friction="0.0"/>
+  </joint>
+
+  <!-- Right Hip joint: Connect right leg to torso (mirrored) -->
+  <joint name="right_hip_joint" type="revolute">
+    <parent link="torso"/>
+    <child link="right_leg"/>
+    <!-- Position: front-left side of torso base (mirrored Y) -->
+    <origin xyz="-0.1 0.05 0" rpy="0 0 0"/>
+    <!-- Rotate around X-axis (forward/backward motion) -->
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.785" upper="0.785" velocity="1.5" effort="15"/>
+    <dynamics damping="0.1" friction="0.0"/>
+  </joint>
+
+</robot>

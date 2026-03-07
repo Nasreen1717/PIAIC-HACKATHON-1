@@ -1,0 +1,189 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Translation API",
+    "description": "Protected translation endpoint for the Physical AI textbook. Requires JWT authentication.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Development server"
+    },
+    {
+      "url": "https://api.physicalai.dev",
+      "description": "Production server"
+    }
+  ],
+  "paths": {
+    "/api/v1/translate": {
+      "post": {
+        "summary": "Translate text to target language",
+        "description": "Translates provided text to the specified target language. Requires valid JWT authentication token.",
+        "operationId": "translateText",
+        "tags": ["translate"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslateRequest"
+              },
+              "examples": {
+                "simple": {
+                  "summary": "Simple translation request",
+                  "value": {
+                    "text": "The quick brown fox jumps over the lazy dog.",
+                    "source_lang": "en",
+                    "target_lang": "ur"
+                  }
+                },
+                "withSessionId": {
+                  "summary": "Request with session tracking",
+                  "value": {
+                    "text": "Physics is the study of matter and energy.",
+                    "source_lang": "en",
+                    "target_lang": "ur",
+                    "session_id": "session_abc123def456"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Translation successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (validation error)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required or token invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable (translation service error)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TranslateRequest": {
+        "type": "object",
+        "description": "Request to translate text to target language",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text content to translate (max 50,000 characters)",
+            "minLength": 1,
+            "maxLength": 50000,
+            "example": "The quick brown fox jumps over the lazy dog."
+          },
+          "source_lang": {
+            "type": "string",
+            "description": "Source language code (ISO 639-1, default: en)",
+            "default": "en",
+            "example": "en"
+          },
+          "target_lang": {
+            "type": "string",
+            "description": "Target language code (ISO 639-1, default: ur for Urdu)",
+            "default": "ur",
+            "example": "ur"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Optional session identifier for tracking related translations",
+            "example": "session_abc123def456"
+          }
+        }
+      },
+      "TranslateResponse": {
+        "type": "object",
+        "description": "Successful translation response",
+        "required": ["translated_text", "detected_lang", "confidence"],
+        "properties": {
+          "translated_text": {
+            "type": "string",
+            "description": "Translated text in target language",
+            "example": "تیز رفتار بھوری لومڑی سست کتے کے اوپر کودتی ہے۔"
+          },
+          "detected_lang": {
+            "type": "string",
+            "description": "Language detected in source text (ISO 639-1 code)",
+            "example": "en"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "float",
+            "description": "Confidence score of translation quality (0.0 to 1.0)",
+            "minimum": 0,
+            "maximum": 1,
+            "example": 0.95
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Echo back of the request session_id if provided",
+            "example": "session_abc123def456"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "Standard error response",
+        "required": ["detail"],
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "Human-readable error message",
+            "example": "Not authenticated"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token from /api/auth/signin or /api/auth/signup. Include in Authorization header as 'Bearer {token}'."
+      }
+    }
+  }
+}

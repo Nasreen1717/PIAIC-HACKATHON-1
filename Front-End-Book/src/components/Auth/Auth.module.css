@@ -1,0 +1,202 @@
+/**
+ * Styles for authentication pages (signup, signin).
+ */
+
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 2rem;
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+}
+
+.formWrapper {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+  width: 100%;
+  max-width: 500px;
+}
+
+.formWrapper h1 {
+  margin: 0 0 1.5rem;
+  text-align: center;
+  color: #333;
+  font-size: 1.8rem;
+}
+
+.errorMessage {
+  background: #fee;
+  border-left: 4px solid #c33;
+  color: #c33;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+legend {
+  font-weight: 600;
+  color: #333;
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.formGroup label {
+  font-weight: 500;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.formGroup input,
+.formGroup textarea,
+.formGroup select {
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: border-color 0.3s;
+}
+
+.formGroup input:focus,
+.formGroup textarea:focus,
+.formGroup select:focus {
+  outline: none;
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+}
+
+.formGroup input:disabled,
+.formGroup textarea:disabled,
+.formGroup select:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.formGroup textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.error {
+  color: #c33;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.checkboxGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkboxGroup input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.checkboxGroup label {
+  margin: 0;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.submitButton {
+  padding: 0.9rem;
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.submitButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 20px rgba(20, 184, 166, 0.4);
+}
+
+.submitButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.signinLink,
+.signupLink {
+  text-align: center;
+  margin: 0;
+  font-size: 0.95rem;
+  color: #666;
+}
+
+.signinLink a,
+.signupLink a {
+  color: #14b8a6;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.3s;
+}
+
+.signinLink a:hover,
+.signupLink a:hover {
+  color: #0d9488;
+  text-decoration: underline;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .container {
+    padding: 1rem;
+  }
+
+  .formWrapper {
+    padding: 1.5rem;
+  }
+
+  .formWrapper h1 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  form {
+    gap: 1rem;
+  }
+
+  fieldset {
+    gap: 0.8rem;
+  }
+
+  .formGroup input,
+  .formGroup textarea,
+  .formGroup select {
+    padding: 0.65rem;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}
