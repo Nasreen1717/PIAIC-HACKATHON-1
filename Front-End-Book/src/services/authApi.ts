@@ -3,7 +3,10 @@
  * Used when context is not available or for specific API operations.
  */
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE =
+  typeof process !== 'undefined' && process.env?.REACT_APP_API_URL
+    ? process.env.REACT_APP_API_URL
+    : 'http://localhost:8000';
 
 export interface AuthTokenResponse {
   access_token: string;
