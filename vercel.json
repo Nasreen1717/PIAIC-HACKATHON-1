@@ -19,11 +19,11 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/Front-End-Book/build/$1"
+      "dest": "/$1"
     },
     {
       "src": "/",
-      "dest": "/Front-End-Book/build/index.html"
+      "dest": "/index.html"
     }
   ],
   "functions": {
