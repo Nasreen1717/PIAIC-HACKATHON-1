@@ -4,7 +4,11 @@
   "outputDirectory": "Front-End-Book/build",
   "installCommand": "npm install --prefix Front-End-Book && pip install --target ./api/lib -r ./api/requirements.txt",
   "env": {
-    "REACT_APP_API_URL": "/api"
+    "REACT_APP_API_URL": "/api",
+    "DATABASE_URL": "@database_url",
+    "JWT_SECRET": "@jwt_secret",
+    "OPENAI_API_KEY": "@openai_api_key",
+    "FRONTEND_URL": "@frontend_url"
   },
   "functions": {
     "api/**/*.py": {
