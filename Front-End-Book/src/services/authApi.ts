@@ -29,7 +29,7 @@ export const authApi = {
     fullName: string,
     background?: Record<string, any>
   ): Promise<AuthTokenResponse> {
-    const response = await fetch(`${API_BASE}/api/auth/signup`, {
+    const response = await fetch(`${API_BASE}/auth/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -53,7 +53,7 @@ export const authApi = {
     password: string,
     rememberMe = false
   ): Promise<AuthTokenResponse> {
-    const response = await fetch(`${API_BASE}/api/auth/signin`, {
+    const response = await fetch(`${API_BASE}/auth/signin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -72,7 +72,7 @@ export const authApi = {
   },
 
   async signout(token: string): Promise<void> {
-    await fetch(`${API_BASE}/api/auth/signout`, {
+    await fetch(`${API_BASE}/auth/signout`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -81,7 +81,7 @@ export const authApi = {
   },
 
   async getProfile(token: string): Promise<UserProfile> {
-    const response = await fetch(`${API_BASE}/api/auth/me`, {
+    const response = await fetch(`${API_BASE}/auth/me`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
@@ -95,7 +95,7 @@ export const authApi = {
   },
 
   async updateProfile(token: string, updates: Record<string, any>): Promise<UserProfile> {
-    const response = await fetch(`${API_BASE}/api/users/me`, {
+    const response = await fetch(`${API_BASE}/users/me`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',

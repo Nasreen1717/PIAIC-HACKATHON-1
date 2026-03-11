@@ -5,7 +5,7 @@
  *
  * Features:
  * - Fetches article content from DOM via querySelector
- * - POSTs to /api/v1/personalize endpoint with JWT token
+ * - POSTs to /v1/personalize endpoint with JWT token
  * - Handles response/errors per ADR-004 (graceful degradation)
  * - Manages state: default, loading, personalized, error
  * - Stores original content in ref for reset functionality
@@ -108,7 +108,7 @@ export const usePersonalization = (): UsePersonalizationResult => {
           typeof process !== 'undefined' && process.env?.REACT_APP_API_URL
             ? process.env.REACT_APP_API_URL
             : '/api';
-        const response = await fetch(`${apiUrl}/api/v1/personalize`, {
+        const response = await fetch(`${apiUrl}/v1/personalize`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
