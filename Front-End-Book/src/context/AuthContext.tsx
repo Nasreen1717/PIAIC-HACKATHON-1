@@ -7,7 +7,7 @@ import React, { createContext, useState, useCallback, useEffect } from 'react';
 // Get API base URL from environment or default to localhost
 const API_BASE_URL = typeof process !== 'undefined' && process.env?.REACT_APP_API_URL
   ? process.env.REACT_APP_API_URL
-  : 'http://localhost:8000';
+  : '/api';
 
 interface UserBackground {
   id?: number;

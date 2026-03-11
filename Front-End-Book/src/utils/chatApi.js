@@ -7,7 +7,7 @@
 const API_BASE_URL =
   typeof process !== 'undefined' && process.env?.REACT_APP_API_URL
     ? process.env.REACT_APP_API_URL
-    : 'http://localhost:8000';
+    : '/api';
 const TIMEOUT_MS = 15000;
 const MAX_RETRIES = 3;
 

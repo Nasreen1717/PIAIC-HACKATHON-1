@@ -107,7 +107,7 @@ export const usePersonalization = (): UsePersonalizationResult => {
         const apiUrl =
           typeof process !== 'undefined' && process.env?.REACT_APP_API_URL
             ? process.env.REACT_APP_API_URL
-            : 'http://localhost:8000';
+            : '/api';
         const response = await fetch(`${apiUrl}/api/v1/personalize`, {
           method: 'POST',
           headers: {

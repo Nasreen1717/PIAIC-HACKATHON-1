@@ -6,7 +6,7 @@
 const API_BASE =
   typeof process !== 'undefined' && process.env?.REACT_APP_API_URL
     ? process.env.REACT_APP_API_URL
-    : 'http://localhost:8000';
+    : '/api';
 
 export interface AuthTokenResponse {
   access_token: string;
