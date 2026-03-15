@@ -2,7 +2,7 @@
   "version": 2,
   "buildCommand": "npm run build --prefix Front-End-Book",
   "outputDirectory": "Front-End-Book/build",
-  "installCommand": "npm install && npm install --prefix Front-End-Book && (pip install --target ./api/lib -r ./api/requirements.txt || true)",
+  "installCommand": "npm install && npm install --prefix Front-End-Book",
   "env": {
     "REACT_APP_API_URL": "/api",
     "DATABASE_URL": "@database_url",
@@ -11,21 +11,8 @@
     "FRONTEND_URL": "@frontend_url"
   },
   "functions": {
-    "api/**/*.py": {
-      "runtime": "python3.9"
-    },
     "api/**/*.js": {
       "runtime": "nodejs18.x"
     }
-  },
-  "routes": [
-    {
-      "src": "/(.*\\..*)",
-      "dest": "/$1"
-    },
-    {
-      "src": "/.*",
-      "dest": "/index.html"
-    }
-  ]
+  }
 }
