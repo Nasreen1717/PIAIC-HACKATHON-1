@@ -1,4 +1,9 @@
 {
+  "dependencies": {
+    "pg": "^8.11.3",
+    "jsonwebtoken": "^9.1.2",
+    "bcryptjs": "^2.4.3"
+  },
   "devDependencies": {
     "sharp": "^0.34.5"
   }

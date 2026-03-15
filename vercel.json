@@ -13,9 +13,20 @@
   "functions": {
     "api/**/*.py": {
       "runtime": "python3.9"
+    },
+    "api/**/*.js": {
+      "runtime": "nodejs18.x"
     }
   },
   "routes": [
+    {
+      "src": "/api/auth/signin",
+      "dest": "/api/auth/signin.js"
+    },
+    {
+      "src": "/api/auth/signup",
+      "dest": "/api/auth/signup.js"
+    },
     {
       "src": "/api/(.*)",
       "dest": "/api/$1.py"
