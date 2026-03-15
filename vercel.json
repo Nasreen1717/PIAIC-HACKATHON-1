@@ -1,7 +1,6 @@
 {
   "version": 2,
   "buildCommand": "npm run build --prefix Front-End-Book",
-  "outputDirectory": "Front-End-Book/build",
   "installCommand": "npm install && npm install --prefix Front-End-Book",
   "env": {
     "REACT_APP_API_URL": "/api",
