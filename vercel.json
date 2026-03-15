@@ -17,8 +17,8 @@
   },
   "routes": [
     {
-      "src": "/api/(?P<path>.*)",
-      "dest": "/api/$path.py"
+      "src": "/api/(.*)",
+      "dest": "/api/$1.py"
     },
     {
       "src": "/(.*\\..*)",
