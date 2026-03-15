@@ -1,11 +1,5 @@
 {
   "version": 2,
   "buildCommand": "npm run build --prefix Front-End-Book",
-  "env": {
-    "REACT_APP_API_URL": "/api",
-    "DATABASE_URL": "@database_url",
-    "JWT_SECRET": "@jwt_secret",
-    "OPENAI_API_KEY": "@openai_api_key",
-    "FRONTEND_URL": "@frontend_url"
-  }
+  "installCommand": "npm install && npm install --prefix Front-End-Book"
 }
