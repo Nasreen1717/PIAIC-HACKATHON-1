@@ -1,0 +1,335 @@
+# API Contracts: Chapter 7 - Isaac Sim Examples
+# Defines input/output specifications for each example
+
+examples:
+
+  - id: "7.1"
+    name: "Isaac Sim Installation Validation"
+    description: "Verify Isaac Sim 2023.8+ installation and GPU availability"
+
+    inputs:
+      isaac_sim_path:
+        type: "string"
+        description: "Path to Isaac Sim installation directory"
+        example: "/home/user/isaac-sim/isaac-sim-2023.8.1-linux"
+
+      test_duration_seconds:
+        type: "float"
+        description: "How long to run test simulation (seconds)"
+        default: 5.0
+        min: 1.0
+        max: 30.0
+
+    outputs:
+      installation_valid:
+        type: "boolean"
+        description: "True if Isaac Sim installed and functional"
+
+      gpu_available:
+        type: "boolean"
+        description: "True if NVIDIA GPU detected and accessible"
+
+      gpu_name:
+        type: "string"
+        description: "Name of detected GPU (e.g., 'NVIDIA RTX 4070 Ti')"
+
+      gpu_vram_gb:
+        type: "float"
+        description: "Detected GPU VRAM in gigabytes"
+
+      cuda_version:
+        type: "string"
+        description: "CUDA version (e.g., '12.4')"
+
+      simulation_fps:
+        type: "float"
+        description: "Achieved simulation frames per second (target: >30 FPS)"
+
+      error_messages:
+        type: "array[string]"
+        description: "Any errors encountered (empty if successful)"
+
+    success_criteria:
+      - installation_valid == true
+      - gpu_available == true
+      - gpu_vram_gb >= 8.0
+      - simulation_fps > 20.0
+      - error_messages is empty
+
+  - id: "7.2"
+    name: "URDF Import & Visualization"
+    description: "Import robot URDF into Isaac Sim and validate physics representation"
+
+    inputs:
+      urdf_file_path:
+        type: "string"
+        description: "Path to URDF file to import"
+        example: "/models/humanoid_robot.urdf"
+
+      isaac_sim_scene_path:
+        type: "string"
+        description: "Path where to save Isaac Sim scene (USD format)"
+        default: "/tmp/imported_scene.usd"
+
+    outputs:
+      import_successful:
+        type: "boolean"
+        description: "True if URDF imported without errors"
+
+      scene_usd_path:
+        type: "string"
+        description: "Path to generated USD scene file"
+
+      robot_visual_representation:
+        type: "object"
+        properties:
+          total_meshes:
+            type: "integer"
+            description: "Number of visual meshes loaded"
+          collision_primitives:
+            type: "integer"
+            description: "Number of collision geometries"
+          bounding_box:
+            type: "object"
+            description: "Scene bounding box [min_x, min_y, min_z, max_x, max_y, max_z]"
+
+      physics_validation:
+        type: "object"
+        properties:
+          total_mass_kg:
+            type: "float"
+            description: "Total robot mass (kilograms)"
+          joint_count:
+            type: "integer"
+            description: "Number of actuated joints"
+          collision_free:
+            type: "boolean"
+            description: "True if no self-collisions detected at rest"
+
+      error_messages:
+        type: "array[string]"
+        description: "Any import warnings or errors"
+
+    success_criteria:
+      - import_successful == true
+      - robot_visual_representation.total_meshes > 5
+      - physics_validation.collision_free == true
+      - error_messages does not contain "critical"
+
+  - id: "7.3"
+    name: "Physics Tuning & Parameter Validation"
+    description: "Configure physics parameters (gravity, friction, restitution) and validate accuracy"
+
+    inputs:
+      gravity_vector:
+        type: "array[float]"
+        description: "Gravity acceleration [gx, gy, gz] in m/s²"
+        default: [0, 0, -9.81]
+
+      friction_coefficient:
+        type: "float"
+        description: "Ground friction coefficient (0.0–1.0)"
+        default: 0.7
+        min: 0.0
+        max: 1.0
+
+      restitution:
+        type: "float"
+        description: "Coefficient of restitution (0.0–1.0)"
+        default: 0.1
+        min: 0.0
+        max: 1.0
+
+      simulation_duration_seconds:
+        type: "float"
+        description: "How long to run physics validation"
+        default: 10.0
+
+    outputs:
+      physics_accuracy:
+        type: "float"
+        description: "Accuracy compared to expected physics (0.0–1.0)"
+        notes: "1.0 = perfect match, <0.95 = tuning needed"
+
+      gravity_measured:
+        type: "array[float]"
+        description: "Measured gravity after validation"
+
+      contact_forces:
+        type: "array[float]"
+        description: "Measured contact forces during simulation (sample)"
+
+      energy_conservation:
+        type: "float"
+        description: "Percentage of energy conserved (0–100%)"
+
+      simulation_stable:
+        type: "boolean"
+        description: "True if physics simulation remained stable (no divergence)"
+
+      warnings:
+        type: "array[string]"
+        description: "Physics warnings (e.g., 'friction > 1.0 detected')"
+
+    success_criteria:
+      - physics_accuracy >= 0.95
+      - simulation_stable == true
+      - gravity_measured within ±0.05 m/s² of input
+      - energy_conservation >= 90.0
+
+  - id: "7.4"
+    name: "Sensor Simulation (Camera & Depth)"
+    description: "Configure and validate camera and depth sensor simulation"
+
+    inputs:
+      camera_resolution:
+        type: "array[integer]"
+        description: "Camera image resolution [width, height] in pixels"
+        default: [1920, 1080]
+
+      fov_degrees:
+        type: "float"
+        description: "Horizontal field of view in degrees"
+        default: 60.0
+        min: 30.0
+        max: 120.0
+
+      depth_range:
+        type: "array[float]"
+        description: "Depth sensor range [min_m, max_m]"
+        default: [0.1, 10.0]
+
+      simulation_frames:
+        type: "integer"
+        description: "Number of frames to simulate and capture"
+        default: 30
+
+    outputs:
+      rgb_images_captured:
+        type: "integer"
+        description: "Number of valid RGB images captured"
+
+      depth_maps_captured:
+        type: "integer"
+        description: "Number of valid depth maps captured"
+
+      image_statistics:
+        type: "object"
+        properties:
+          mean_brightness:
+            type: "float"
+            description: "Average pixel intensity (0–255)"
+          min_brightness:
+            type: "float"
+          max_brightness:
+            type: "float"
+
+      depth_statistics:
+        type: "object"
+        properties:
+          mean_depth_m:
+            type: "float"
+            description: "Average depth value in meters"
+          min_depth_m:
+            type: "float"
+          max_depth_m:
+            type: "float"
+          valid_pixels_percent:
+            type: "float"
+            description: "Percentage of non-zero depth pixels"
+
+      camera_intrinsics:
+        type: "object"
+        description: "Recovered camera calibration matrix"
+        properties:
+          fx:
+            type: "float"
+          fy:
+            type: "float"
+          cx:
+            type: "float"
+          cy:
+            type: "float"
+
+      frames_per_second:
+        type: "float"
+        description: "Achieved capture rate (Hz)"
+
+    success_criteria:
+      - rgb_images_captured == simulation_frames
+      - depth_maps_captured == simulation_frames
+      - image_statistics.mean_brightness in [50, 200]
+      - depth_statistics.valid_pixels_percent > 90.0
+      - frames_per_second > 15.0
+
+  - id: "7.5"
+    name: "Synthetic Data Export & Annotation"
+    description: "Generate synthetic training dataset with labels and metadata"
+
+    inputs:
+      num_samples:
+        type: "integer"
+        description: "Number of images to generate"
+        default: 100
+        min: 10
+        max: 10000
+
+      annotation_types:
+        type: "array[string]"
+        description: "Types of annotations to include"
+        options: ["bounding_box", "segmentation_mask", "depth_map", "semantic_label"]
+        default: ["segmentation_mask", "depth_map"]
+
+      output_format:
+        type: "enum"
+        description: "Export format"
+        options: ["png", "jpg", "exr", "raw"]
+        default: "png"
+
+      output_directory:
+        type: "string"
+        description: "Directory to save dataset"
+        default: "/tmp/synthetic_dataset"
+
+    outputs:
+      total_images_generated:
+        type: "integer"
+        description: "Total images successfully generated"
+
+      images_with_annotations:
+        type: "integer"
+        description: "Images with complete annotations"
+
+      dataset_size_mb:
+        type: "float"
+        description: "Total dataset size in megabytes"
+
+      generation_time_seconds:
+        type: "float"
+        description: "Time to generate full dataset"
+
+      images_per_hour:
+        type: "float"
+        description: "Generation rate (images/hour) for capacity planning"
+
+      dataset_manifest:
+        type: "object"
+        description: "Metadata file describing dataset"
+        properties:
+          image_list:
+            type: "array[string]"
+            description: "List of generated image filenames"
+          annotation_list:
+            type: "array[string]"
+            description: "List of annotation files"
+          metadata_version:
+            type: "string"
+          timestamp:
+            type: "string"
+
+    success_criteria:
+      - total_images_generated == num_samples
+      - images_with_annotations >= num_samples * 0.95
+      - dataset_manifest exists and is valid JSON
+      - images_per_hour >= 500.0
+      - no corrupted files in output directory

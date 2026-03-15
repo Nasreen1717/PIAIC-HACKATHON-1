@@ -1,0 +1,152 @@
+{
+  "metadata": {
+    "start_time": "2026-02-03T00:47:00.995388",
+    "end_time": "2026-02-03T00:47:55.021225",
+    "duration_seconds": 54.025852
+  },
+  "steps": [
+    {
+      "name": "Parse Content",
+      "status": "success",
+      "timestamp": "2026-02-03T00:47:01.488665",
+      "details": {
+        "chapters": 19,
+        "sections": 569
+      }
+    },
+    {
+      "name": "Chunk Content",
+      "status": "success",
+      "timestamp": "2026-02-03T00:47:02.614745",
+      "details": {
+        "chunks": 702,
+        "avg_tokens": 150.94871794871796
+      }
+    },
+    {
+      "name": "Generate Embeddings",
+      "status": "success",
+      "timestamp": "2026-02-03T00:47:39.868513",
+      "details": {
+        "chunks": 702,
+        "dimension": 1536
+      }
+    },
+    {
+      "name": "Upload to Qdrant",
+      "status": "success",
+      "timestamp": "2026-02-03T00:47:55.008976",
+      "details": {
+        "points": 420,
+        "collection": {
+          "name": "physical_ai_textbook",
+          "vectors_count": 420,
+          "vector_size": 1536
+        }
+      }
+    }
+  ],
+  "stats": {
+    "chapters_parsed": 19,
+    "sections_parsed": 569,
+    "chunks_created": 702,
+    "avg_tokens_per_chunk": 150.94871794871796,
+    "min_tokens": 1,
+    "max_tokens": 434,
+    "embeddings_generated": 702,
+    "embedding_dimension": 1536,
+    "points_uploaded": 420,
+    "collection_name": "physical_ai_textbook",
+    "total_vectors": 420,
+    "sample_queries": [
+      {
+        "query": "What is ROS 2 and what are its main features?",
+        "expected_keywords": [
+          "ROS",
+          "nodes",
+          "topics"
+        ],
+        "scope": "in"
+      },
+      {
+        "query": "Explain the difference between Gazebo and Isaac Sim",
+        "expected_keywords": [
+          "simulation",
+          "physics",
+          "sensor"
+        ],
+        "scope": "in"
+      },
+      {
+        "query": "What is bipedal locomotion in humanoid robotics?",
+        "expected_keywords": [
+          "bipedal",
+          "locomotion",
+          "gait"
+        ],
+        "scope": "in"
+      },
+      {
+        "query": "How does NVIDIA Isaac handle real-time perception?",
+        "expected_keywords": [
+          "Isaac",
+          "perception",
+          "real-time"
+        ],
+        "scope": "in"
+      },
+      {
+        "query": "What are Vision-Language Actions (VLA)?",
+        "expected_keywords": [
+          "vision",
+          "language",
+          "action"
+        ],
+        "scope": "in"
+      },
+      {
+        "query": "What is the weather today?",
+        "expected_keywords": [
+          "cannot answer"
+        ],
+        "scope": "out"
+      },
+      {
+        "query": "Tell me a joke about robots",
+        "expected_keywords": [
+          "cannot answer"
+        ],
+        "scope": "out"
+      },
+      {
+        "query": "What is the capital of France?",
+        "expected_keywords": [
+          "cannot answer"
+        ],
+        "scope": "out"
+      },
+      {
+        "query": "How do I cook pasta?",
+        "expected_keywords": [
+          "cannot answer"
+        ],
+        "scope": "out"
+      },
+      {
+        "query": "Explain quantum computing basics",
+        "expected_keywords": [
+          "cannot answer"
+        ],
+        "scope": "out"
+      }
+    ]
+  },
+  "errors": [],
+  "warnings": [
+    {
+      "message": "Found 252 chunks with <100 tokens",
+      "timestamp": "2026-02-03T00:47:02.614666"
+    }
+  ],
+  "success": true
+}

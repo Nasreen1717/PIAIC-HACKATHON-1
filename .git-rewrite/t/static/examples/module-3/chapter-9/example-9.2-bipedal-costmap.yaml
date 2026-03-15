@@ -1,0 +1,272 @@
+# Example 9.2: Bipedal Costmap Configuration for Nav2
+#
+# This configuration file defines the costmap layers for humanoid bipedal navigation.
+# It includes static map, obstacle detection, inflation (humanoid-specific), and slope penalties.
+#
+# Usage:
+#   Include in nav2_params.yaml or load via launch file
+#   ros2 launch nav2_bringup nav2_bringup_launch.py \
+#     params_file:=example_9_2_costmap_params.yaml
+#
+# Parameters:
+#   - inflation_radius: 0.20m (foot-sized safety margin)
+#   - cost_scaling_factor: 10.0 (aggressive near obstacles)
+#   - robot_radius: 0.15m (humanoid body width estimate)
+#   - update_frequency: 10 Hz (balance latency vs. accuracy)
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      # Frame and timing configuration
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      global_frame: map
+      robot_base_frame: base_link
+      use_sim_time: false
+      transform_tolerance: 0.1
+
+      # Map dimensions and resolution
+      width: 100
+      height: 100
+      resolution: 0.05
+      origin_x: -2.5
+      origin_y: -2.5
+
+      # Footprint definition (humanoid two-feet model)
+      footprint_padding: 0.05
+      robot_radius: 0.15
+      # For more precise modeling, define actual footprint:
+      # footprint: "[[-0.125, -0.05], [0.125, -0.05], [0.125, 0.05], [-0.125, 0.05]]"
+
+      # Layers: Static Map + Inflation
+      plugins: ["static_layer", "inflation_layer"]
+
+      # Layer 1: Static map (walls, furniture, etc.)
+      static_layer:
+        plugin: nav2_costmap_2d::StaticLayer
+        map_subscribe_transient_local: true
+        map_topic: /map
+        unknown_cost_value: 0
+        lethal_cost_threshold: 100
+        trinary_costmap: true
+
+      # Layer 2: Inflation (humanoid-specific expansion)
+      inflation_layer:
+        plugin: nav2_costmap_2d::InflationLayer
+
+        # Inflation radius: distance to expand obstacles
+        # For humanoids: 0.20m (includes body sway and balance margin)
+        inflation_radius: 0.20
+
+        # Cost scaling: how aggressively to penalize near obstacles
+        # Higher = steeper cost gradient
+        cost_scaling_factor: 10.0
+
+        # Inflate unknown cells (conservative)
+        inflate_unknown: false
+        inflate_around_unknown: false
+
+        # Cost values
+        # 0: free
+        # 1-252: inflated (distance-based)
+        # 253: lethal (collision)
+        # 254: free (static)
+        # 255: unknown
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      # Frame and timing
+      update_frequency: 10.0
+      publish_frequency: 5.0
+      global_frame: odom
+      robot_base_frame: base_link
+      use_sim_time: false
+      transform_tolerance: 0.1
+
+      # Local map (5m x 5m region around robot)
+      width: 100
+      height: 100
+      resolution: 0.05
+      origin_x: -2.5
+      origin_y: -2.5
+
+      # Footprint
+      footprint_padding: 0.05
+      robot_radius: 0.15
+
+      # Layers: Dynamic Obstacles + Inflation
+      plugins: ["obstacle_layer", "inflation_layer"]
+
+      # Layer 1: Obstacle detection from sensors
+      obstacle_layer:
+        plugin: nav2_costmap_2d::ObstacleLayer
+        enabled: true
+        observation_sources: [scan, camera]
+
+        # LiDAR scan data
+        scan:
+          sensor_frame: laser_frame
+          topic: /scan
+          observation_persistence: 0.0
+          expected_transform_tolerance: 0.1
+
+          # Height thresholds (ignore ceiling, detect obstacles)
+          min_obstacle_height: 0.05   # >5cm = obstacle
+          max_obstacle_height: 2.0    # <2m = relevant
+
+          # Clearing and marking behavior
+          clearing: true   # Remove obstacles from map
+          marking: true    # Add new obstacles
+          raytrace_range: 3.0
+          data_type: LaserScan
+
+        # RGB-D camera depth data (if available)
+        camera:
+          sensor_frame: camera_depth_frame
+          topic: /camera/depth/points
+          observation_persistence: 0.0
+          expected_transform_tolerance: 0.2
+          min_obstacle_height: 0.05
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: PointCloud2
+
+        # Voxel grid parameters
+        max_obstacle_height: 2.0
+        min_obstacle_height: 0.05
+
+      # Layer 2: Inflation for local planning
+      inflation_layer:
+        plugin: nav2_costmap_2d::InflationLayer
+        inflation_radius: 0.25  # Slightly larger for local (reactive) planning
+        cost_scaling_factor: 10.0
+        inflate_unknown: false
+        inflate_around_unknown: false
+
+# Advanced: Slope/Gravity Layer (custom for humanoids)
+# Note: This requires custom nav2 extension
+gravity_layer:
+  gravity_layer:
+    ros__parameters:
+      plugin: humanoid_nav2::GravityLayer
+      enabled: true
+
+      # Slope penalty configuration
+      slope_penalty_factor: 5.0    # Cost multiplier for slope
+      max_slope: 0.15              # 8.5 degrees (avoid steeper ramps)
+      max_slope_penalty: 200       # Max cost added by slope
+
+      # Friction model (estimated coefficient of friction)
+      min_friction_coefficient: 0.3
+
+      # Energy cost (prefer efficient paths)
+      energy_model: EFFORT_BASED
+      uphill_cost_multiplier: 2.0
+      downhill_cost_multiplier: 0.5
+
+      # Topic for terrain data
+      terrain_topic: /terrain_classifier/terrain_type
+      elevation_topic: /elevation_mapping/elevation
+
+# Costmap Server Parameters
+costmap_server:
+  costmap_server:
+    ros__parameters:
+      use_sim_time: false
+
+      # Update behavior
+      update_frequency: 10.0
+      publish_frequency: 5.0
+
+      # Safety parameters
+      transform_timeout: 0.1
+      thread_pool_size: 4  # Multi-threaded costmap updates
+
+# Safety and Recovery Parameters
+safety:
+  ros__parameters:
+    # Emergency stop parameters
+    imu_topic: /imu/data
+    acceleration_threshold: 1.5  # G's, fall detection
+    fall_detection_enabled: true
+
+    # Contact sensors (humanoid feet)
+    contact_sensor_topic: /contact/feet
+    contact_required_duration: 0.1  # 100ms ground contact needed
+
+    # Motor/Joint limits
+    joint_state_topic: /joint_states
+    joint_effort_limit: 50.0  # Nm, abort if exceeded
+
+    # Thermal monitoring
+    thermal_monitoring_enabled: true
+    motor_temperature_threshold: 80.0  # Celsius
+    motor_temperature_warning: 70.0
+
+# Path Planning Parameters (SMAC Planner)
+smac_planner:
+  SmacPlanner:
+    ros__parameters:
+      use_sim_time: false
+
+      # Motion model for humanoids (footstep lattice)
+      motion_model_type: FOOTSTEP
+
+      # Footstep lattice definition
+      footstep_stride: 0.5        # Normal stride: 0.5m
+      footstep_stride_min: 0.3    # Conservative: 0.3m
+      footstep_stride_max: 0.8    # Fast: 0.8m
+      footstep_width: 0.15        # Step width (balance)
+
+      # Search parameters
+      max_iterations: 1000000
+      max_planning_time: 5.0
+
+      # Cost parameters
+      reverse_penalty: 2.0
+      change_penalty: 0.0
+      non_straight_penalty: 1.2
+      cost_penalty: 1.7
+
+      # Heuristic
+      analytic_expansion_ratio: 3.5
+      analytic_expansion_max_length: 3.0
+
+# Local Controller Parameters (DWB)
+dwb_controller:
+  DWBLocalPlanner:
+    ros__parameters:
+      use_sim_time: false
+
+      # Velocity limits (humanoid walking)
+      max_vel_x: 0.5        # Max forward speed: 0.5 m/s
+      min_vel_x: 0.0
+      max_vel_y: 0.0        # No lateral motion (bipedal)
+      min_vel_y: 0.0
+      max_vel_theta: 0.5    # Max turning: 0.5 rad/s
+      min_vel_theta: -0.5
+
+      # Acceleration limits
+      acc_lim_x: 0.2
+      acc_lim_y: 0.0
+      acc_lim_theta: 0.2
+      decel_lim_x: -0.2
+      decel_lim_theta: -0.2
+
+      # Sampling
+      vx_samples: 20
+      vy_samples: 1
+      vtheta_samples: 20
+
+      # Trajectory parameters
+      sim_time: 1.7         # How far ahead to simulate
+      linear_granularity: 0.05
+      angular_granularity: 0.025
+
+      # Tolerance
+      xy_goal_tolerance: 0.25
+      trans_stopped_velocity: 0.25
+      theta_stopped_velocity: 0.1
+      sim_period: 0.125

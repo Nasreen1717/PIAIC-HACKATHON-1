@@ -1,0 +1,348 @@
+<?xml version="1.0"?>
+<!--
+  Gazebo World File: Simple Humanoid Robot Simulation
+
+  Purpose: Basic world setup for Chapter 4 examples
+  - Ground plane
+  - Default physics (ODE, 1000 Hz)
+  - Gravity (Earth-like: -9.81 m/s²)
+  - Humanoid robot positioned above ground
+  - Basic lighting and visualization
+
+  Usage: gazebo 4-simple-world.world
+  Or via ROS 2 launch file
+
+  Date: 2026-01-22
+  Author: Module 2 - Digital Twin
+-->
+
+<sdf version="1.6">
+  <world name="humanoid_world">
+
+    <!-- ============================================= -->
+    <!-- Physics Engine Configuration                 -->
+    <!-- ============================================= -->
+    <physics name="default_physics" default="true" type="ode">
+      <!-- Physics timestep: 0.001s = 1000 Hz (very accurate) -->
+      <max_step_size>0.001</max_step_size>
+
+      <!-- Real-time factor: 1.0 = runs at real-time speed -->
+      <!-- Values < 1.0 slow down; > 1.0 speed up (if hardware allows) -->
+      <real_time_factor>1.0</real_time_factor>
+
+      <!-- Update rate: 1000 Hz (matches timestep) -->
+      <real_time_update_rate>1000</real_time_update_rate>
+
+      <!-- ODE-specific physics solver configuration -->
+      <ode>
+        <solver>
+          <!-- Type: 'quick' (faster, less accurate) or 'world' (slower, more accurate) -->
+          <type>quick</type>
+          <!-- Solver iterations per step (higher = more accurate but slower) -->
+          <iters>50</iters>
+          <!-- Successive Over-Relaxation parameter (1.0-2.0) -->
+          <sor>1.3</sor>
+        </solver>
+
+        <!-- Constraint parameters for joint behavior -->
+        <constraints>
+          <!-- Constraint force mixing (CFM): smoothness vs stability -->
+          <cfm>0</cfm>
+          <!-- Error reduction parameter (ERP): error correction speed -->
+          <erp>0.2</erp>
+          <!-- Maximum velocity correction per step (prevents instability) -->
+          <contact_max_correcting_vel>100.0</contact_max_correcting_vel>
+          <!-- Contact surface layer: penetration depth before contact registered -->
+          <contact_surface_layer>0.001</contact_surface_layer>
+        </constraints>
+      </ode>
+    </physics>
+
+    <!-- ============================================= -->
+    <!-- World Properties                             -->
+    <!-- ============================================= -->
+
+    <!-- Gravity: Earth-like (9.81 m/s² downward) -->
+    <!-- Direction: negative Z-axis (down in ROS convention) -->
+    <!-- Try different values:                        -->
+    <!--   Moon:   <gravity>0 0 -1.62</gravity>      -->
+    <!--   Mars:   <gravity>0 0 -3.71</gravity>      -->
+    <!--   Jupiter:<gravity>0 0 -24.79</gravity>     -->
+    <gravity>0 0 -9.81</gravity>
+
+    <!-- Ambient lighting (background illumination) -->
+    <ambient_light>
+      <color>0.5 0.5 0.5 1.0</color>  <!-- RGB + alpha (0-1) -->
+    </ambient_light>
+
+    <!-- ============================================= -->
+    <!-- Light Sources                               -->
+    <!-- ============================================= -->
+
+    <!-- Sun light (directional, like sunlight) -->
+    <light name="sun" type="directional">
+      <pose>0 0 10 0 0 0</pose>  <!-- Position above world -->
+
+      <!-- Light properties -->
+      <diffuse>0.8 0.8 0.8 1</diffuse>    <!-- Main lighting color -->
+      <specular>0.9 0.9 0.9 1</specular>  <!-- Specular highlights -->
+
+      <!-- Shadow configuration -->
+      <cast_shadows>true</cast_shadows>
+
+      <!-- Light attenuation (falloff with distance) -->
+      <attenuation>
+        <range>20</range>              <!-- Max distance light travels (m) -->
+      </attenuation>
+
+      <!-- Direction of light (unit vector pointing toward light source) -->
+      <!-- This points down and back, creating dramatic shadows -->
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Optional: Additional point light for fill illumination -->
+    <light name="fill_light" type="point">
+      <pose>-5 5 5 0 0 0</pose>
+      <diffuse>0.5 0.5 0.5 0.5</diffuse>
+      <attenuation>
+        <range>15</range>
+      </attenuation>
+    </light>
+
+    <!-- ============================================= -->
+    <!-- Ground Plane (Static Surface)               -->
+    <!-- ============================================= -->
+
+    <model name="ground_plane">
+      <!-- Static = doesn't move, no physics applied -->
+      <static>true</static>
+
+      <!-- Single link representing the ground -->
+      <link name="link">
+
+        <!-- Collision geometry for physics -->
+        <collision name="collision">
+          <geometry>
+            <!-- Infinite plane at z=0 -->
+            <plane>
+              <normal>0 0 1</normal>  <!-- Normal vector pointing up -->
+              <size>100 100</size>      <!-- Large enough for our simulation -->
+            </plane>
+          </geometry>
+
+          <!-- Surface properties for collisions with ground -->
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.7</mu>    <!-- Coefficient of friction (0-1) -->
+                <mu2>0.7</mu2>  <!-- Secondary friction direction -->
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+
+        <!-- Visual geometry (appearance in Gazebo GUI) -->
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+
+          <!-- Material/color appearance -->
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>  <!-- Built-in grey material -->
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================= -->
+    <!-- Optional: Humanoid Robot (commented out)    -->
+    <!-- ============================================= -->
+
+    <!-- To use, create an SDF model or reference an existing model -->
+    <!-- Example (requires humanoid.sdf in same directory):        -->
+    <!--
+    <model name="humanoid">
+      <include>
+        <uri>file://./humanoid.sdf</uri>
+        <pose>0 0 1.0 0 0 0</pose>  Position robot above ground
+      </include>
+    </model>
+    -->
+
+    <!-- ============================================= -->
+    <!-- Optional: Test Objects (for collision demo) -->
+    <!-- ============================================= -->
+
+    <!-- Wooden cube for testing collisions -->
+    <!-- Uncomment to enable in simulation              -->
+    <!--
+    <model name="wooden_box">
+      <pose>2 0 0.5 0 0 0</pose>  Position above ground
+      <link name="link">
+        <inertial>
+          <mass>1.0</mass>  Mass in kg
+          <inertia>
+            <ixx>0.01</ixx>   Moment of inertia (x-axis)
+            <iyy>0.01</iyy>   Moment of inertia (y-axis)
+            <izz>0.01</izz>   Moment of inertia (z-axis)
+          </inertia>
+        </inertial>
+
+        Visual geometry
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.1 0.1</size>  Width x Height x Depth
+            </box>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Wood</name>
+            </script>
+          </material>
+        </visual>
+
+        Collision geometry
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.1 0.1</size>
+            </box>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.8</mu>    Wood has higher friction
+                <mu2>0.8</mu2>
+              </ode>
+            </friction>
+            <contact>
+              <ode>
+                <kp>1e13</kp>    Contact stiffness (spring constant)
+                <kd>1</kd>       Contact damping
+              </ode>
+            </contact>
+          </surface>
+        </collision>
+      </link>
+    </model>
+    -->
+
+    <!-- Metal sphere for testing rolling physics -->
+    <!--
+    <model name="metal_sphere">
+      <pose>-2 0 1.0 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>2.0</mass>
+          <inertia>
+            <ixx>0.004</ixx>
+            <iyy>0.004</iyy>
+            <izz>0.004</izz>
+          </inertia>
+        </inertial>
+
+        <visual name="visual">
+          <geometry>
+            <sphere>
+              <radius>0.05</radius>  5 cm radius
+            </sphere>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Chrome</name>
+            </script>
+          </material>
+        </visual>
+
+        <collision name="collision">
+          <geometry>
+            <sphere>
+              <radius>0.05</radius>
+            </sphere>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.3</mu>    Metal has low friction
+                <mu2>0.3</mu2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+      </link>
+    </model>
+    -->
+
+  </world>
+</sdf>
+
+<!--
+  ============================================
+  HOW TO USE THIS WORLD FILE
+  ============================================
+
+  1. BASIC USAGE (Gazebo only):
+     gazebo 4-simple-world.world
+
+  2. VIA ROS 2 LAUNCH FILE:
+     ros2 launch my_package gazebo.launch.xml world:=4-simple-world.world
+
+  3. HEADLESS (no GUI, faster):
+     gzserver 4-simple-world.world
+
+  4. WITH VERBOSE OUTPUT:
+     gzserver --verbose 4-simple-world.world
+
+  5. VALIDATE SYNTAX:
+     gz sdf 4-simple-world.world
+
+  ============================================
+  PHYSICS TUNING TIPS
+  ============================================
+
+  For STABILITY (less shaking):
+  - Increase solver iterations: <iters>100</iters>
+  - Decrease timestep: <max_step_size>0.0005</max_step_size>
+  - Increase contact stiffness: <kp>1e14</kp>
+
+  For SPEED (faster simulation):
+  - Decrease solver iterations: <iters>20</iters>
+  - Increase timestep: <max_step_size>0.002</max_step_size>
+  - Use 'quick' solver (already set)
+
+  For REALISTIC PHYSICS:
+  - Match real gravity: <gravity>0 0 -9.81</gravity>
+  - Use realistic friction: <mu>0.5</mu>
+  - Set proper masses and inertias
+
+  ============================================
+  COMMON MODIFICATIONS
+  ============================================
+
+  • Change gravity (Moon simulation):
+    <gravity>0 0 -1.62</gravity>
+
+  • Faster simulation (2x speed):
+    <real_time_factor>2.0</real_time_factor>
+
+  • Lower friction (icy surface):
+    <mu>0.1</mu>
+
+  • Add more lighting:
+    Create more <light> elements
+
+  • Enable/disable objects:
+    Uncomment/comment model blocks
+
+  ============================================
+-->

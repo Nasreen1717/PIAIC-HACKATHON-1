@@ -1,0 +1,141 @@
+/**
+ * T067: Global Chatbot Styles
+ * T068: Responsive Design
+ * Theme integration, dark mode support, and responsive breakpoints
+ */
+
+/* Use Docusaurus theme variables for consistency */
+.chatbot-container {
+  --chatbot-primary: var(--ifm-color-primary);
+  --chatbot-bg: var(--ifm-background-color);
+  --chatbot-text: var(--ifm-font-color-base);
+  --chatbot-border: var(--ifm-toc-border-color);
+}
+
+/* Dark mode adjustments via Docusaurus theme system */
+[data-theme='dark'] .chatbot-container {
+  --chatbot-bg: var(--ifm-background-surface-color);
+  --chatbot-text: var(--ifm-font-color-base);
+}
+
+/* Ensure proper z-index stacking for chat components */
+.floating-button-wrapper {
+  position: relative;
+  z-index: 999;
+}
+
+/* Responsive: Mobile first approach */
+@media (max-width: 480px) {
+  /* Extra small devices: full screen modal */
+  .chatModal {
+    width: 100vw;
+    height: 100vh;
+    bottom: 0 !important;
+    right: 0 !important;
+    border-radius: 0;
+  }
+
+  .floatingButton {
+    bottom: 16px;
+    right: 16px;
+    width: 56px;
+    height: 56px;
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Tablet and below: full screen drawer */
+  .chatModal {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .chatHeader {
+    padding: 12px;
+  }
+
+  .chatMessages {
+    padding: 10px;
+  }
+
+  .chatInputForm {
+    padding: 8px;
+  }
+
+  .message {
+    max-width: 95%;
+  }
+}
+
+/* Desktop and above: modal in corner */
+@media (min-width: 769px) {
+  .chatModal {
+    width: 400px;
+    height: 600px;
+    bottom: 90px;
+    right: 20px;
+    border-radius: 12px;
+  }
+
+  .message {
+    max-width: 85%;
+  }
+}
+
+/* Prevent body scroll when chat is open on mobile */
+body.chat-open {
+  overflow: hidden;
+}
+
+/* Ensure floating button is always accessible */
+@media (max-width: 480px) {
+  .floatingButton {
+    z-index: 9999;
+  }
+}
+
+/* Print styles: hide chat when printing */
+@media print {
+  .floatingButton,
+  .chatModal {
+    display: none !important;
+  }
+}
+
+/* Animation for modal entrance */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chatModal {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Accessibility: focus indicators */
+.chatInput:focus,
+.sendButton:focus,
+.citationLink:focus {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+/* Scrollbar styling for all browsers */
+.chatMessages {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ifm-color-gray-400) transparent;
+}

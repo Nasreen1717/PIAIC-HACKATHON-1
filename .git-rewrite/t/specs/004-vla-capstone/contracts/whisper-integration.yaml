@@ -1,0 +1,166 @@
+# Contract: Whisper Voice Processing Integration
+# Chapter 10: Voice-to-Action Integration
+# Defines the API for voice capture, transcription, and ROS 2 publication
+
+service:
+  name: WhisperTranscriptionService
+  description: "Captures audio and transcribes via OpenAI Whisper API"
+
+  # Input contract
+  request:
+    - field: audio_data
+      type: bytes
+      description: "Raw audio bytes (WAV format, PCM 16-bit mono 16kHz)"
+      constraints: "max 25MB (OpenAI limit)"
+
+    - field: language
+      type: string
+      description: "Language code for transcription"
+      default: "en"
+      constraints: "ISO 639-1 code"
+
+  # Output contract
+  response:
+    - field: transcript
+      type: string
+      description: "Transcribed text"
+
+    - field: confidence_score
+      type: float
+      description: "Whisper confidence [0.0-1.0]"
+
+    - field: language
+      type: string
+      description: "Detected language"
+
+    - field: error
+      type: string | null
+      description: "Error message if transcription failed"
+
+  # Error handling
+  errors:
+    - code: "AUDIO_TOO_SHORT"
+      description: "Audio duration < 0.5 seconds"
+      http_status: 400
+
+    - code: "AUDIO_TOO_LONG"
+      description: "Audio duration > 300 seconds"
+      http_status: 400
+
+    - code: "API_RATE_LIMIT"
+      description: "OpenAI rate limit exceeded"
+      http_status: 429
+      retry_strategy: "exponential backoff, max 3 attempts"
+
+    - code: "API_ERROR"
+      description: "OpenAI API error"
+      http_status: 500
+
+---
+
+ros2_topic:
+  name: /voice/transcribed_command
+  message_type: std_msgs/String
+  description: "Published transcribed voice commands"
+  publish_frequency: "on-demand (after each successful transcription)"
+
+  example_message:
+    data: "bring me the red cube from the table"
+
+---
+
+ros2_node:
+  name: whisper_transcriber_node
+  language: Python
+  description: "ROS 2 node wrapping Whisper API and publishing results"
+
+  lifecycle_states: ["unconfigured", "inactive", "active"]
+
+  # Subscribe to raw audio
+  subscriptions:
+    - topic: /audio/raw
+      message_type: sensor_msgs/CompressedImage | audio_msgs/AudioData
+      callback: "on_audio_received"
+
+  # Publish transcribed commands
+  publications:
+    - topic: /voice/transcribed_command
+      message_type: std_msgs/String
+
+  # Services for manual control
+  services:
+    - name: /voice/start_listening
+      type: std_srvs/Empty
+      description: "Start voice capture"
+
+    - name: /voice/stop_listening
+      type: std_srvs/Empty
+      description: "Stop voice capture"
+
+    - name: /voice/test_transcription
+      type: custom_msgs/TranscriptRequest
+      response: custom_msgs/TranscriptResponse
+      description: "Test transcription on provided audio"
+
+---
+
+# Chapter 10 Example Contracts (Code Examples)
+
+examples:
+  - example_id: "example_01_basic_whisper"
+    title: "Basic Whisper Transcription"
+    inputs:
+      audio_file: "path/to/audio.wav"
+    expected_output:
+      transcript: string
+      confidence_score: float (>0.9 for clear speech)
+    latency_target: "<2 seconds"
+
+  - example_id: "example_02_ros2_publisher"
+    title: "ROS 2 Topic Publisher for Voice Commands"
+    inputs:
+      microphone_input: "real-time audio stream"
+    expected_output:
+      topic_message: "std_msgs/String with transcript"
+      publish_frequency: "every 2-3 seconds (per utterance)"
+    latency_target: "<2 seconds per command"
+
+  - example_id: "example_03_error_handling"
+    title: "Handling Confidence and Error Cases"
+    inputs:
+      low_confidence_audio: "noisy or unclear audio"
+      no_speech: "silence"
+    expected_output:
+      low_confidence: "ignored (confidence < 0.5)"
+      no_speech: "silent (no publish)"
+    latency_target: "<2 seconds"
+
+---
+
+# Chapter 10 Exercise Contracts
+
+exercises:
+  - exercise_id: "exercise_01_whisper_accuracy"
+    title: "Measure Whisper Accuracy on Your Voice"
+    instructions: |
+      Record 10 voice commands with known transcripts.
+      Run them through the Whisper node.
+      Compare predicted vs. ground truth.
+      Calculate accuracy %.
+    acceptance_criteria:
+      - "Accuracy >= 90% on clear speech"
+      - "Log all transcriptions to file"
+      - "Report confidence scores"
+    expected_time: "30 minutes"
+
+  - exercise_id: "exercise_02_ros2_integration"
+    title: "Build a Simple Voice Command Listener"
+    instructions: |
+      Create a ROS 2 node that subscribes to /voice/transcribed_command
+      and responds with "I heard: [command]".
+      Test with 5 different voice inputs.
+    acceptance_criteria:
+      - "Node runs without errors"
+      - "Responds to all published commands"
+      - "Logs show correct message flow"
+    expected_time: "45 minutes"

@@ -1,0 +1,181 @@
+{
+  "collection_name": "textbook_chunks",
+  "description": "Vector collection for Physical AI textbook content ingestion and retrieval",
+  "version": "1.0.0",
+  "created_date": "2026-01-27",
+
+  "vectors": {
+    "dense": {
+      "size": 1536,
+      "distance": "Cosine",
+      "description": "OpenAI text-embedding-3-small embeddings for semantic search",
+      "quantization": {
+        "scalar": {
+          "type": "int8",
+          "quantile": 0.99,
+          "always_ram": false
+        },
+        "comment": "int8 quantization reduces storage 8x with <2% recall loss; uses disk offloading"
+      }
+    },
+    "sparse": {
+      "index": {
+        "on_disk": true
+      },
+      "description": "BM25 sparse embeddings for keyword/hybrid search (optional, not required for MVP)"
+    }
+  },
+
+  "payload_schema": {
+    "module_number": {
+      "type": "integer",
+      "description": "Textbook module: 1=Fundamentals, 2=Simulation, 3=Isaac, 4=VLA"
+    },
+    "chapter_number": {
+      "type": "integer",
+      "description": "Chapter within module (1-12 across all modules)"
+    },
+    "section_title": {
+      "type": "text",
+      "description": "Main section heading (used for citations)"
+    },
+    "subsection": {
+      "type": "text",
+      "description": "Sub-section heading if applicable"
+    },
+    "heading_hierarchy": {
+      "type": "keyword",
+      "description": "Breadcrumb: [Chapter X, Section Y, Subsection Z] for context"
+    },
+    "content": {
+      "type": "text",
+      "description": "Full chunk text (256-512 tokens)"
+    },
+    "content_type": {
+      "type": "keyword",
+      "description": "Classification: 'text' | 'code' | 'equation' | 'figure_reference'"
+    },
+    "chunk_index": {
+      "type": "integer",
+      "description": "Sequential position in section (for ordering multi-chunk responses)"
+    },
+    "token_count": {
+      "type": "integer",
+      "description": "Number of tokens in chunk (target: 256-512)"
+    },
+    "source_file": {
+      "type": "text",
+      "description": "Original .md or .mdx filename; e.g., 'module-3/chapter-8.mdx'"
+    },
+    "file_hash": {
+      "type": "keyword",
+      "description": "SHA256 hash of source file for detecting updates"
+    },
+    "embedded_at": {
+      "type": "text",
+      "description": "ISO 8601 timestamp when chunk was embedded"
+    },
+    "batch_id": {
+      "type": "keyword",
+      "description": "OpenAI Batch API job ID for tracking bulk embeddings"
+    }
+  },
+
+  "hnsw_config": {
+    "m": 16,
+    "ef_construct": 200,
+    "ef": 100,
+    "max_indexing_threads": 4,
+    "payload_m": 8,
+    "description": {
+      "m": "Number of connections per point (16 = default; higher = more connections)",
+      "ef_construct": "Construction parameter (200 = balance quality/speed)",
+      "ef": "Search parameter; higher = better recall but slower",
+      "max_indexing_threads": "Parallel indexing threads",
+      "payload_m": "Payload index connections"
+    },
+    "comment": "HNSW (Hierarchical Navigable Small World) achieves <30ms p95 latency at scale"
+  },
+
+  "storage_config": {
+    "snapshots_path": "/qdrant/snapshots",
+    "snapshots_to_keep": 3,
+    "comment": "Keep 3 snapshots for backup/recovery"
+  },
+
+  "indexing_strategy": {
+    "skip_unknown_fields": false,
+    "on_disk_payload": true,
+    "comment": "Payload stored on disk to reduce memory overhead"
+  },
+
+  "performance_targets": {
+    "vector_search_p95_latency_ms": 30,
+    "max_collection_size": 100000,
+    "estimated_memory_gb": 2.5,
+    "comment": "Targets for monitoring/alerting on production instance"
+  },
+
+  "ingestion_config": {
+    "batch_size": 100,
+    "chunk_size_tokens": 512,
+    "chunk_overlap_tokens": 50,
+    "embedding_model": "text-embedding-3-small",
+    "embedding_dimension": 1536,
+    "batch_api_pricing": "$0.02 per 1M tokens (75% savings vs. real-time API)",
+    "comment": "Use OpenAI Batch API for cost-effective bulk embedding"
+  },
+
+  "search_strategy": {
+    "hybrid_search": {
+      "enabled": true,
+      "dense_weight": 0.7,
+      "sparse_weight": 0.3,
+      "comment": "Combine semantic (dense) + keyword (sparse) search for better recall on technical terms"
+    },
+    "filter_capabilities": {
+      "by_module": "payload.module_number = 3",
+      "by_chapter": "payload.chapter_number IN [8, 9]",
+      "by_content_type": "payload.content_type = 'text'",
+      "example_query": "Search for 'bipedal locomotion' in Module 3, Chapters 8-9 excluding code examples"
+    }
+  },
+
+  "client_configuration_python": {
+    "url": "https://your-cluster.qdrant.io",
+    "api_key": "qdrant_api_key_xxx",
+    "timeout": 30,
+    "grpc_enabled": true,
+    "grpc_max_msg_size": 41943040,
+    "note": "Use gRPC for lower latency; REST fallback available"
+  },
+
+  "migration_notes": {
+    "from_pinecone": "Qdrant provides lower latency + no lock-in vs. Pinecone",
+    "cost_comparison": "Qdrant Cloud Free Tier sufficient for 100K vectors (~2.5GB); $0 cost",
+    "scaling": "Qdrant scales to millions of vectors with minimal latency increase"
+  },
+
+  "quality_assurance": {
+    "recall_target": 0.90,
+    "precision_target": 0.85,
+    "measurement_method": "Evaluate on 100-200 representative queries against ground truth",
+    "latency_monitoring": "Track p50, p95, p99 latencies in production dashboards"
+  },
+
+  "example_payload": {
+    "module_number": 3,
+    "chapter_number": 8,
+    "section_title": "Bipedal Locomotion Fundamentals",
+    "subsection": "Physics of Gait Cycles",
+    "heading_hierarchy": ["Chapter 8: Motion Planning", "Bipedal Locomotion Fundamentals", "Physics of Gait Cycles"],
+    "content": "Bipedal locomotion refers to movement using two legs. In humanoid robots, this requires precise balance and coordination between the upper and lower body. The robot must continuously calculate the center of mass and adjust joint angles to maintain stability...",
+    "content_type": "text",
+    "chunk_index": 0,
+    "token_count": 128,
+    "source_file": "module-3/chapter-8.mdx",
+    "file_hash": "abc123def456...",
+    "embedded_at": "2026-01-27T08:00:00Z",
+    "batch_id": "batch_6716b6d6b00b0f01e5d8c8e6d4c2a1f0"
+  }
+}

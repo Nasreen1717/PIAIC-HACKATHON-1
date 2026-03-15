@@ -1,0 +1,997 @@
+---
+title: Chapter 10 - Voice-to-Action Integration with OpenAI Whisper
+sidebar_label: Chapter 10 Voice-to-Action
+sidebar_position: 1
+---
+
+# Chapter 10: Voice-to-Action - Integrating OpenAI Whisper with ROS 2
+
+## Learning Objectives
+
+By the end of this chapter, you will:
+
+- ✅ Understand the voice processing pipeline and OpenAI Whisper API architecture
+- ✅ Capture and validate audio input from microphones in ROS 2 environments
+- ✅ Integrate Whisper transcription with ROS 2 publishers and lifecycle management
+- ✅ Implement robust error handling for low-confidence predictions and API failures
+- ✅ Measure transcription accuracy, latency, and optimize performance with batch processing
+
+**Estimated time**: 12-15 hours
+**Difficulty**: Intermediate
+**Prerequisites**: Chapter 9 (Module 3 completion), Linux terminal proficiency, OpenAI API access
+
+---
+
+## 1. Voice Processing Architecture
+
+### 1.1 What is Voice-to-Action?
+
+**Voice-to-Action** is the bridge between human intent (spoken commands) and robot execution. It transforms natural language speech into structured, actionable instructions that downstream systems can interpret and execute.
+
+In the context of a humanoid robot, the voice processing pipeline consists of:
+
+```
+┌─────────────────┐
+│   Audio Input   │
+│  (Microphone)   │
+└────────┬────────┘
+         │
+         ↓
+┌─────────────────────────────┐
+│  Audio Pre-Processing       │
+│  • Normalize volume          │
+│  • Detect silence periods    │
+│  • Validate duration (0.5-   │
+│    300 seconds)             │
+└────────┬────────────────────┘
+         │
+         ↓
+┌─────────────────────────────┐
+│  OpenAI Whisper API         │
+│  • Send audio to cloud      │
+│  • Receive transcript text  │
+│  • Get confidence score     │
+└────────┬────────────────────┘
+         │
+         ↓
+┌─────────────────────────────┐
+│  Post-Processing            │
+│  • Confidence thresholding   │
+│  • Error classification      │
+│  • Logging & retry logic     │
+└────────┬────────────────────┘
+         │
+         ↓
+┌─────────────────────────────┐
+│  ROS 2 Publication           │
+│  • Publish to /voice/...    │
+│  • Topic: std_msgs/String   │
+│  • Latency: &lt;2 seconds      │
+└─────────────────────────────┘
+```
+
+**Key Concepts**:
+
+1. **Whisper Model**: A robust speech-to-text model trained on 680,000 hours of multilingual audio. It supports 99 languages and is remarkably resilient to accents, background noise, and technical language.
+
+2. **Confidence Scoring**: Whisper doesn't explicitly return confidence, but we infer it from:
+   - Decoding score (probability of the transcribed sequence)
+   - Comparison with alternative transcriptions
+   - Consistency across repeated submissions
+
+3. **Latency Considerations**:
+   - Network round-trip: 0.1-1.0 second
+   - Whisper processing: 0.5-2 seconds (depends on audio length)
+   - ROS 2 overhead: &lt;100 milliseconds
+   - **Target**: Complete transcription within 2 seconds
+
+4. **Error Cases**:
+   - **Audio Too Short**: &lt;0.5 seconds (silence or incomplete utterance)
+   - **Audio Too Long**: &gt;300 seconds (memory constraints)
+   - **API Rate Limit**: Too many requests in short time (retry with backoff)
+   - **API Error**: OpenAI service unavailable or invalid key
+   - **Low Confidence**: Transcription quality below threshold
+
+### 1.2 System Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| **OS** | Ubuntu 22.04 LTS | Ubuntu 22.04.3+ |
+| **Python** | 3.9 | 3.10+ |
+| **Network** | 10 Mbps | 50+ Mbps (for real-time) |
+| **Microphone** | Built-in or USB | USB condenser (low noise) |
+| **OpenAI API Key** | Required | — |
+| **ROS 2** | Humble | Humble LTS |
+| **Storage** | 500 MB (for logging) | 2+ GB (for audio samples) |
+
+---
+
+## 2. OpenAI Whisper API Setup & Authentication
+
+### 2.1 API Fundamentals
+
+**OpenAI Whisper API** provides a RESTful endpoint for speech-to-text:
+
+```
+POST https://api.openai.com/v1/audio/transcriptions
+```
+
+**Request Format**:
+```python
+{
+  "model": "whisper-1",               # Fixed model name
+  "file": &lt;binary_audio_data&gt;,        # WAV, MP3, M4A, FLAC (max 25MB)
+  "language": "en",                   # Optional; auto-detects if omitted
+  "prompt": "Technical robot commands", # Optional; helps with context
+  "response_format": "json"           # json or text
+}
+```
+
+**Response Format**:
+```json
+{
+  "text": "bring me the red cube from the table",
+  "language": "en"
+}
+```
+
+### 2.2 Authentication & Environment Setup
+
+**Step 1: Obtain API Key**
+
+Sign up at [https://platform.openai.com/](https://platform.openai.com/) and generate an API key from **API Keys** → **Create New Secret Key**.
+
+**Step 2: Store Securely**
+
+Create `.env` file in your project root:
+
+```bash
+# .env (never commit to git!)
+OPENAI_API_KEY="sk-..."
+OPENAI_ORG_ID="org-..." # Optional: for organization billing
+ROS_DOMAIN_ID="26"       # For ROS 2 isolation
+```
+
+**Step 3: Load Environment**
+
+```python
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+api_key = os.getenv("OPENAI_API_KEY")
+org_id = os.getenv("OPENAI_ORG_ID", None)
+```
+
+### 2.3 Whisper Client Wrapper
+
+The **whisper_client.py** module encapsulates API calls with retry logic and error handling:
+
+**Key Methods**:
+- `transcribe(audio_bytes, language="en")` → Returns transcript + confidence
+- `transcribe_file(file_path)` → Load WAV and transcribe
+- `validate_audio(audio_bytes)` → Check duration constraints
+
+---
+
+## 3. Audio Capture with PyAudio
+
+### 3.1 Microphone Input Pipeline
+
+**PyAudio** provides cross-platform access to audio input devices. The capture pipeline:
+
+```
+┌──────────────────────────┐
+│  List Available Devices  │
+└──────────────┬───────────┘
+               │
+               ↓
+┌──────────────────────────┐
+│  Select Microphone       │
+│  (index or name match)   │
+└──────────────┬───────────┘
+               │
+               ↓
+┌──────────────────────────┐
+│  Open Audio Stream       │
+│  • Channels: 1 (mono)    │
+│  • Sample Rate: 16kHz    │
+│  • Bit Depth: 16-bit PCM │
+└──────────────┬───────────┘
+               │
+               ↓
+┌──────────────────────────┐
+│  Record Audio Frames     │
+│  • Accumulate chunks     │
+│  • Detect end (silence)  │
+│  • Validate duration     │
+└──────────────┬───────────┘
+               │
+               ↓
+┌──────────────────────────┐
+│  Save to WAV File        │
+│  (or send directly)      │
+└──────────────────────────┘
+```
+
+### 3.2 Audio Validation Constraints
+
+| Constraint | Value | Reason |
+|-----------|-------|--------|
+| **Sample Rate** | 16 kHz | Whisper's native rate |
+| **Channels** | 1 (mono) | Simplifies processing |
+| **Bit Depth** | 16-bit PCM | Standard encoding |
+| **Min Duration** | 0.5 seconds | Meaningful speech content |
+| **Max Duration** | 300 seconds (5 min) | OpenAI API limit |
+| **File Format** | WAV or MP3 | OpenAI supported formats |
+
+### 3.3 Audio Capturer Implementation
+
+**audio_capturer.py** provides:
+- Device enumeration (`list_devices()`)
+- Real-time recording (`record_seconds()`)
+- Validation (`validate_audio()`)
+- File I/O (`save_wav()`, `load_wav()`)
+
+**Usage Pattern**:
+```python
+from audio_capturer import AudioCapturer
+
+capturer = AudioCapturer(device_index=0, sample_rate=16000)
+audio_bytes = capturer.record_seconds(5.0)  # Record 5 seconds
+capturer.validate_audio(audio_bytes)  # Check constraints
+```
+
+---
+
+## 4. ROS 2 Integration: Lifecycle Nodes & Publishers
+
+### 4.1 ROS 2 Lifecycle Management
+
+The **whisper_transcriber_node** uses ROS 2 **lifecycle nodes** to manage state transitions safely:
+
+```
+┌─────────────┐
+│ unconfigured│
+└──────┬──────┘
+       │ (configure)
+       ↓
+┌─────────────┐
+│  inactive   │
+└──────┬──────┘
+       │ (activate)
+       ↓
+┌─────────────┐
+│   active    │ ← Process voice commands here
+└──────┬──────┘
+       │ (deactivate)
+       ↓
+┌─────────────┐
+│  inactive   │
+└──────┬──────┘
+       │ (cleanup)
+       ↓
+┌─────────────┐
+│ unconfigured│
+└─────────────┘
+```
+
+**Lifecycle Benefits**:
+- **Safety**: Ensure node is ready before accepting commands
+- **Debugging**: Clear state transitions for troubleshooting
+- **Recovery**: Restart by cycling through states
+- **Testability**: Predictable startup/shutdown behavior
+
+### 4.2 Node Structure
+
+**transcriber_node.py** implements:
+
+1. **on_configure()**: Initialize Whisper client, setup publisher
+2. **on_activate()**: Start listening for audio (if live input), create audio stream
+3. **on_process_data()**: Handle transcription requests (called by timer or service)
+4. **on_deactivate()**: Stop listening, close audio stream
+5. **on_cleanup()**: Release resources, close Whisper client
+
+### 4.3 Publishing to ROS 2 Topics
+
+**Topic Definition**:
+```yaml
+Topic: /voice/transcribed_command
+Type: std_msgs/String
+Publish Rate: On-demand (after each transcription)
+```
+
+**Example Publisher Code**:
+```python
+from rclpy.node import Node
+from std_msgs.msg import String
+
+class WhisperTranscriberNode(Node):
+    def __init__(self):
+        super().__init__('whisper_transcriber_node')
+        self.publisher = self.create_publisher(
+            String,
+            '/voice/transcribed_command',
+            qos_profile=10  # Queue size
+        )
+
+    def publish_command(self, transcript: str):
+        msg = String()
+        msg.data = transcript
+        self.publisher.publish(msg)
+        self.get_logger().info(f"Published: {transcript}")
+```
+
+### 4.4 Launch File Configuration
+
+**whisper.launch.py** provides parameterized startup:
+
+```python
+# Example parameters
+{
+  "audio_device": 0,           # Microphone index
+  "model_version": "base",      # whisper-1 variant
+  "timeout_seconds": 10.0,      # Max wait per command
+  "confidence_threshold": 0.5,  # Reject below this
+  "language": "en"              # Default language
+}
+```
+
+---
+
+## 5. Error Handling & Confidence Scoring
+
+### 5.1 Error Classification
+
+| Error Code | Cause | Recovery Strategy |
+|-----------|-------|-------------------|
+| **AUDIO_TOO_SHORT** | Duration < 0.5s | Prompt user to speak longer |
+| **AUDIO_TOO_LONG** | Duration > 300s | Split audio or reject |
+| **API_RATE_LIMIT** | &gt;3 requests/minute | Exponential backoff (retry 3x) |
+| **API_ERROR** | Service unavailable | Log error, alert user, retry later |
+| **INVALID_API_KEY** | Missing/expired key | Check `.env`, regenerate key |
+| **NETWORK_ERROR** | No internet connection | Queue request, retry when online |
+| **LOW_CONFIDENCE** | Quality < threshold | Ask user to repeat or clarify |
+
+### 5.2 Confidence Thresholding
+
+Whisper doesn't provide explicit confidence scores, but we can estimate by:
+
+1. **Decoding Score**: Probability of transcribed sequence (higher = more confident)
+2. **Character Coverage**: Ratio of recognized characters to total
+3. **Known Commands**: Cross-reference against known valid commands (if using fixed vocabulary)
+
+**Threshold Policy**:
+```python
+confidence_threshold = 0.5  # Configurable
+
+if confidence < threshold:
+    action = "reject"  # Reject and ask user to repeat
+else:
+    action = "accept"  # Publish to ROS 2 topic
+```
+
+### 5.3 Retry Logic & Exponential Backoff
+
+**Exponential Backoff Pattern** (for API rate limits):
+
+```python
+def retry_with_backoff(func, max_attempts=3):
+    for attempt in range(max_attempts):
+        try:
+            return func()
+        except RateLimitError as e:
+            wait_time = 2 ** attempt  # 1s, 2s, 4s
+            if attempt < max_attempts - 1:
+                time.sleep(wait_time)
+                continue
+            raise e
+```
+
+---
+
+## 6. Performance Optimization & Latency Measurement
+
+### 6.1 Latency Breakdown
+
+For a typical 2-second command ("move forward"), latency breakdown:
+
+| Component | Time | % of Total |
+|-----------|------|-----------|
+| Audio capture | 2.0s | 43% |
+| Network upload | 0.2s | 4% |
+| Whisper processing | 1.2s | 26% |
+| API latency (network) | 0.3s | 6% |
+| ROS 2 publish | 0.05s | 1% |
+| Buffer/overhead | 0.25s | 5% |
+| **Total** | **4.0s** | **100%** |
+| **Goal** | **&lt;2s** | — |
+
+To meet the **&lt;2 second goal**, we focus on:
+1. Minimize audio capture time (shorter commands)
+2. Batch processing (multiple requests together)
+3. Parallel execution (transcribe while recording)
+
+### 6.2 Batch Processing
+
+Instead of transcribing one command at a time, batch multiple voice inputs:
+
+```python
+# Sequential (slow, ~2s per command)
+for command in commands:
+    transcript = whisper_client.transcribe(command)  # 2s each
+
+# Batch (faster, ~0.5s amortized per command)
+transcripts = whisper_client.batch_transcribe(commands)  # 1s total
+```
+
+### 6.3 Metrics Collection
+
+Create **PerformanceMonitor** class to track:
+
+```python
+class PerformanceMonitor:
+    def __init__(self):
+        self.latencies = []        # Per-request latency
+        self.accuracies = []       # Transcription accuracy
+        self.error_count = 0       # Failed requests
+        self.start_time = None
+
+    def record_latency(self, start: float, end: float):
+        latency = end - start
+        self.latencies.append(latency)
+        return latency
+
+    def get_statistics(self):
+        return {
+            "p50_latency": percentile(self.latencies, 50),
+            "p95_latency": percentile(self.latencies, 95),
+            "p99_latency": percentile(self.latencies, 99),
+            "avg_accuracy": mean(self.accuracies),
+            "error_rate": self.error_count / len(self.latencies)
+        }
+```
+
+---
+
+## Code Examples
+
+### Example 1: Basic Whisper Transcription
+
+```python
+"""
+🚀 Module 4 Example 1: Basic OpenAI Whisper Transcription
+Demonstrates standalone voice-to-text without ROS 2 integration.
+Loads pre-recorded audio, sends to Whisper API, outputs transcript.
+"""
+
+import os
+from openai import OpenAI
+from dotenv import load_dotenv
+
+def basic_whisper_transcription(audio_file_path: str) -> dict:
+    """
+    Transcribe audio file using OpenAI Whisper API.
+
+    Args:
+        audio_file_path: Path to WAV, MP3, M4A, or FLAC file
+
+    Returns:
+        Dictionary with keys:
+        - 'transcript': Transcribed text
+        - 'language': Detected language
+        - 'latency': Request latency in seconds
+    """
+    load_dotenv()
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY not found in .env")
+
+    client = OpenAI(api_key=api_key)
+
+    # ✅ Load audio file
+    with open(audio_file_path, "rb") as audio_file:
+        file_size = os.path.getsize(audio_file_path)
+        print(f"📸 Loading audio: {audio_file_path} ({file_size} bytes)")
+
+        # ✅ Call Whisper API
+        import time
+        start_time = time.time()
+
+        response = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            language="en"
+        )
+
+        latency = time.time() - start_time
+
+    result = {
+        "transcript": response.text,
+        "language": response.get("language", "en"),
+        "latency": latency
+    }
+
+    return result
+
+
+if __name__ == "__main__":
+    # ✅ Example usage
+    audio_path = "examples/data/test_audio.wav"
+
+    if not os.path.exists(audio_path):
+        print(f"❌ Audio file not found: {audio_path}")
+        print("ℹ️  Please provide a WAV file at examples/data/test_audio.wav")
+        exit(1)
+
+    result = basic_whisper_transcription(audio_path)
+
+    print(f"\n✅ Transcription Result:")
+    print(f"  • Transcript: '{result['transcript']}'")
+    print(f"  • Latency: {result['latency']:.2f}s")
+    print(f"  • Language: {result['language']}")
+```
+
+**Expected Output**:
+```
+📸 Loading audio: examples/data/test_audio.wav (96000 bytes)
+✅ Transcription Result:
+  • Transcript: 'move forward'
+  • Latency: 1.23s
+  • Language: en
+```
+
+### Example 2: ROS 2 Publisher Integration
+
+```python
+"""
+🚀 Module 4 Example 2: ROS 2 Whisper Publisher
+Demonstrates ROS 2 node that publishes transcribed voice commands.
+Captures audio from microphone → Whisper API → /voice/transcribed_command topic
+"""
+
+import os
+import time
+from rclpy.node import Node
+from rclpy.lifecycle import Node as LifecycleNode
+from std_msgs.msg import String
+from openai import OpenAI
+from dotenv import load_dotenv
+
+class WhisperPublisherNode(LifecycleNode):
+    """ROS 2 Lifecycle Node for voice command publishing."""
+
+    def __init__(self):
+        super().__init__('whisper_publisher_node')
+        self.publisher = None
+        self.openai_client = None
+        self.recording = False
+
+    def on_configure(self, state):
+        """Configure state: Initialize OpenAI client and publisher."""
+        self.get_logger().info("🔧 Configuring node...")
+
+        # ✅ Load API key
+        load_dotenv()
+        api_key = os.getenv("OPENAI_API_KEY")
+        self.openai_client = OpenAI(api_key=api_key)
+
+        # ✅ Create publisher
+        self.publisher = self.create_publisher(
+            String,
+            '/voice/transcribed_command',
+            qos_profile=10
+        )
+
+        self.get_logger().info("✅ Configuration complete")
+        return super().on_configure(state)
+
+    def on_activate(self, state):
+        """Activate state: Start listening."""
+        self.get_logger().info("▶️  Activating node...")
+        self.recording = True
+        return super().on_activate(state)
+
+    def publish_transcription(self, audio_file_path: str):
+        """
+        Transcribe audio and publish to ROS 2 topic.
+
+        Args:
+            audio_file_path: Path to audio file
+        """
+        if not self.recording or self.publisher is None:
+            self.get_logger().error("❌ Node not active or publisher not initialized")
+            return
+
+        try:
+            # ✅ Transcribe
+            with open(audio_file_path, "rb") as audio_file:
+                start_time = time.time()
+
+                response = self.openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language="en"
+                )
+
+                latency = time.time() - start_time
+
+            transcript = response.text
+
+            # ✅ Publish to topic
+            msg = String()
+            msg.data = transcript
+            self.publisher.publish(msg)
+
+            self.get_logger().info(
+                f"✅ Published: '{transcript}' (latency: {latency:.2f}s)"
+            )
+
+        except Exception as e:
+            self.get_logger().error(f"❌ Error: {str(e)}")
+
+    def on_deactivate(self, state):
+        """Deactivate state: Stop listening."""
+        self.get_logger().info("⏸️  Deactivating node...")
+        self.recording = False
+        return super().on_deactivate(state)
+
+    def on_cleanup(self, state):
+        """Cleanup state: Release resources."""
+        self.get_logger().info("🧹 Cleaning up...")
+        self.publisher = None
+        self.openai_client = None
+        return super().on_cleanup(state)
+
+
+def main():
+    """Example: Launch node and publish transcription."""
+    import rclpy
+
+    rclpy.init()
+    node = WhisperPublisherNode()
+
+    # ✅ Transition to active state
+    node.trigger_transition(1)  # Configure
+    time.sleep(0.5)
+    node.trigger_transition(3)  # Activate
+    time.sleep(0.5)
+
+    # ✅ Test with audio file
+    audio_file = "examples/data/test_audio.wav"
+    if os.path.exists(audio_file):
+        node.publish_transcription(audio_file)
+
+    # ✅ Cleanup
+    node.trigger_transition(4)  # Deactivate
+    time.sleep(0.5)
+    node.trigger_transition(5)  # Cleanup
+
+    node.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+**Usage**:
+```bash
+# Run the ROS 2 node
+python examples/example_02_ros2_publisher.py
+
+# In another terminal, listen to the topic
+ros2 topic echo /voice/transcribed_command
+```
+
+### Example 3: Error Handling & Low Confidence Rejection
+
+```python
+"""
+🚀 Module 4 Example 3: Error Handling and Confidence Thresholding
+Demonstrates graceful error handling for:
+- Low confidence predictions
+- Audio validation failures
+- API errors and timeouts
+"""
+
+import os
+import time
+from openai import OpenAI
+from dotenv import load_dotenv
+
+class ConfidenceBasedTranscriber:
+    """Transcriber with confidence scoring and error handling."""
+
+    def __init__(self, confidence_threshold: float = 0.5, max_retries: int = 3):
+        """
+        Initialize transcriber with configuration.
+
+        Args:
+            confidence_threshold: Minimum confidence [0.0-1.0]
+            max_retries: Max retry attempts for API errors
+        """
+        load_dotenv()
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.client = OpenAI(api_key=self.api_key)
+        self.confidence_threshold = confidence_threshold
+        self.max_retries = max_retries
+        self.error_count = 0
+
+    def validate_audio(self, audio_bytes: bytes) -> tuple[bool, str]:
+        """
+        ✅ Validate audio file constraints.
+
+        Returns:
+            (is_valid, error_message)
+        """
+        # Check minimum size (0.5 seconds at 16kHz 16-bit mono = ~16KB)
+        min_size = 16000 * 0.5 * 2  # 16kHz * 0.5s * 2 bytes
+        if len(audio_bytes) < min_size:
+            return False, "AUDIO_TOO_SHORT: duration < 0.5 seconds"
+
+        # Check maximum size (300 seconds = ~9.6MB)
+        max_size = 16000 * 300 * 2
+        if len(audio_bytes) > max_size:
+            return False, "AUDIO_TOO_LONG: duration > 300 seconds"
+
+        return True, ""
+
+    def transcribe_with_retry(self, audio_bytes: bytes, language: str = "en") -> dict:
+        """
+        ✅ Transcribe audio with exponential backoff retry logic.
+
+        Returns:
+            {
+                'status': 'success' | 'error' | 'low_confidence',
+                'transcript': str or None,
+                'confidence': float,
+                'error': str or None,
+                'attempts': int
+            }
+        """
+        # ✅ Validate audio first
+        is_valid, error_msg = self.validate_audio(audio_bytes)
+        if not is_valid:
+            self.error_count += 1
+            return {
+                'status': 'error',
+                'transcript': None,
+                'confidence': 0.0,
+                'error': error_msg,
+                'attempts': 0
+            }
+
+        # ✅ Retry logic with exponential backoff
+        for attempt in range(self.max_retries):
+            try:
+                start_time = time.time()
+
+                response = self.client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=("audio.wav", audio_bytes),
+                    language=language
+                )
+
+                latency = time.time() - start_time
+                transcript = response.text
+
+                # ✅ Estimate confidence (simplified: use text length as proxy)
+                confidence = min(1.0, len(transcript) / 50)  # Heuristic
+
+                # ❌ Check if confidence below threshold
+                if confidence < self.confidence_threshold:
+                    self.error_count += 1
+                    return {
+                        'status': 'low_confidence',
+                        'transcript': transcript,
+                        'confidence': confidence,
+                        'error': f"Low confidence: {confidence:.2f} < {self.confidence_threshold}",
+                        'attempts': attempt + 1
+                    }
+
+                # ✅ Success
+                return {
+                    'status': 'success',
+                    'transcript': transcript,
+                    'confidence': confidence,
+                    'error': None,
+                    'attempts': attempt + 1
+                }
+
+            except Exception as e:
+                error_str = str(e)
+
+                # ⚠️ Rate limit error: exponential backoff
+                if "rate_limit" in error_str.lower():
+                    if attempt < self.max_retries - 1:
+                        wait_time = 2 ** attempt
+                        print(f"⚠️  Rate limit hit. Retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+
+                # ❌ Other errors: return failure
+                self.error_count += 1
+                return {
+                    'status': 'error',
+                    'transcript': None,
+                    'confidence': 0.0,
+                    'error': str(e),
+                    'attempts': attempt + 1
+                }
+
+        # ❌ All retries exhausted
+        self.error_count += 1
+        return {
+            'status': 'error',
+            'transcript': None,
+            'confidence': 0.0,
+            'error': "Max retries exceeded",
+            'attempts': self.max_retries
+        }
+
+    def get_statistics(self) -> dict:
+        """Get error statistics."""
+        return {
+            'total_errors': self.error_count,
+            'confidence_threshold': self.confidence_threshold
+        }
+
+
+if __name__ == "__main__":
+    # ✅ Example usage
+    transcriber = ConfidenceBasedTranscriber(confidence_threshold=0.5)
+
+    # ✅ Test with a real audio file
+    audio_path = "examples/data/test_audio.wav"
+
+    if os.path.exists(audio_path):
+        with open(audio_path, "rb") as f:
+            audio_bytes = f.read()
+
+        result = transcriber.transcribe_with_retry(audio_bytes)
+
+        print(f"Status: {result['status']}")
+        print(f"Transcript: {result['transcript']}")
+        print(f"Confidence: {result['confidence']:.2f}")
+        if result['error']:
+            print(f"Error: {result['error']}")
+        print(f"Attempts: {result['attempts']}")
+    else:
+        print(f"❌ Audio file not found: {audio_path}")
+```
+
+---
+
+## Exercises
+
+### Exercise 1: Measure Transcription Accuracy
+
+**Objective**: Evaluate Whisper accuracy on self-recorded voice commands.
+
+**Task**:
+1. Record 10 distinct voice commands (e.g., "move forward", "pick up object", "rotate 90 degrees")
+2. Transcribe each using the Whisper API
+3. Compare transcribed text with intended text manually
+4. Calculate accuracy percentage
+5. Log all results (transcript, confidence, accuracy) to a CSV file
+
+**Acceptance Criteria**:
+- [ ] 10 audio files recorded in WAV format
+- [ ] All 10 files successfully transcribed
+- [ ] Accuracy ≥ 90% overall
+- [ ] CSV file created with columns: filename, intended_text, transcribed_text, match (yes/no), confidence
+- [ ] Summary statistics printed (total accuracy, errors logged)
+
+**Starter Code Template**:
+```python
+import csv
+from pathlib import Path
+
+def exercise_01_accuracy_measurement():
+    """
+    Step 1: Record or load 10 test audio files
+    Step 2: Transcribe each
+    Step 3: Compare with reference text
+    Step 4: Calculate accuracy
+    Step 5: Save results to CSV
+    """
+
+    # TODO: Implement
+    pass
+
+if __name__ == "__main__":
+    exercise_01_accuracy_measurement()
+```
+
+### Exercise 2: Create ROS 2 Voice Command Subscriber
+
+**Objective**: Develop a ROS 2 node that listens to voice commands and logs them.
+
+**Task**:
+1. Create a ROS 2 node that subscribes to `/voice/transcribed_command` topic
+2. When a message is received, log it with timestamp
+3. Implement a simple response: print "I heard: [command]" for each command
+4. Test with 5 different voice inputs
+5. Verify that all commands are logged correctly
+
+**Acceptance Criteria**:
+- [ ] Node subscribes to correct topic
+- [ ] Node runs without errors
+- [ ] Prints "I heard: [command]" for each received command
+- [ ] All 5 test commands logged with timestamps
+- [ ] Node can be stopped gracefully with Ctrl+C
+
+**Starter Code Template**:
+```python
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+from datetime import datetime
+
+class VoiceCommandListener(Node):
+    """Listen to voice commands and respond."""
+
+    def __init__(self):
+        super().__init__('voice_listener_node')
+        # TODO: Create subscription
+
+    def command_callback(self, msg: String):
+        """Handle incoming voice command."""
+        # TODO: Implement logging and response
+        pass
+
+def main():
+    rclpy.init()
+    node = VoiceCommandListener()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+---
+
+## Assessment Rubric
+
+Evaluate student submissions using this rubric:
+
+| Criterion | Excellent (40%) | Good (30%) | Fair (20%) | Poor (0%) |
+|-----------|-----------------|-----------|-----------|-----------|
+| **Code Quality** | Clean, documented, follows PEP 8, error handling throughout | Mostly clean, some documentation, minor style issues | Basic structure, minimal documentation | Incomplete, unreadable, no error handling |
+| **Functionality** | All features work; exercises complete and tested | Main features work; minor gaps | Some features work; significant gaps | Core functionality missing |
+| **Documentation** | Comprehensive READMEs, inline comments, clear usage | Adequate documentation; some clarity issues | Minimal documentation | No documentation |
+| **Performance** | Latency &lt;2s, accuracy &gt;90%, efficient code | Latency 2-3s, accuracy 85-90% | Latency &gt;3s, accuracy &lt;85% | Performance not measured |
+| **Error Handling** | Robust error handling, informative messages | Handles main errors, some gaps | Basic error handling | No error handling |
+
+**Total Score**: Sum of all criteria (200 points max)
+
+---
+
+## References
+
+1. Radford, A., Kim, J. W., Xu, T., Brockman, G., Flynn, C., & Sastry, G. (2023). "Robust Speech Recognition via Large-Scale Weak Supervision." In *Proceedings of the 40th International Conference on Machine Learning* (ICML). OpenAI. Available: https://arxiv.org/abs/2212.04356 [Accessed: January 26, 2026]
+
+2. OpenAI. "Whisper API." OpenAI Platform Documentation. Version 1.x. Available: https://platform.openai.com/docs/guides/speech-to-text [Accessed: January 26, 2026]
+
+3. ROS 2 Humble Documentation. "Lifecycle Nodes." Available: https://docs.ros.org/en/humble/Concepts/Advanced/About-Lifecycle-Nodes.html [Accessed: January 26, 2026]
+
+4. Huang, X., Acero, A., & Hon, H. W. (2001). "Spoken Language Processing: A Guide to Theory, Algorithm, and System Development." *Prentice Hall*. ISBN: 0-13-066405-9.
+
+5. McFee, B., Raffel, C., Liang, D., Ellis, D. P., McVicar, M., Battenberg, E., & Nieto, O. (2015). "librosa: Audio and music signal analysis in Python." In *Proceedings of the 14th Python in Science Conference* (SciPy), pp. 18–25. Available: https://github.com/librosa/librosa [Accessed: January 26, 2026]
+
+6. Hugging Face. "Transformers Library: Fine-Tuning Whisper." Documentation. Available: https://huggingface.co/docs/transformers/model_doc/whisper [Accessed: January 26, 2026]
+
+7. Lowe, D. G. (2004). "Distinctive Image Features from Scale-Invariant Keypoints." *International Journal of Computer Vision*, 60(2), 91–110. DOI: 10.1023/B:VISI.0000029664.99615.94 (Referenced for robust feature extraction analogy)
+
+8. ROS 2 Humble. "Publishers and Subscribers." Tutorials. Available: https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Topics/Understanding-ROS2-Topics.html [Accessed: January 26, 2026]
+
+---
+
+**Module**: Module 4 - Vision-Language-Action Capstone
+**Version**: 1.0
+**Last Updated**: January 26, 2026
+**Next Chapter**: Chapter 11 - Cognitive Planning with LLMs

@@ -1,0 +1,379 @@
+# Contract: Task Plan Execution Pipeline
+# Chapter 12: Capstone - Autonomous Humanoid
+# Defines the ROS 2 action pipeline for executing TaskPlans
+
+ros2_action:
+  name: ExecuteTaskPlan
+  type: custom_msgs/ExecuteTaskPlanAction
+  description: "Execute a decomposed task plan and monitor outcomes"
+
+  # Action goal (client → server)
+  goal:
+    - field: plan_id
+      type: string
+      description: "ID of the TaskPlan to execute"
+
+    - field: plan_json
+      type: string
+      description: "Serialized TaskPlan (for validation)"
+
+    - field: allow_user_intervention
+      type: bool
+      description: "If true, pause on errors and wait for user input"
+      default: true
+
+  # Action result (server → client)
+  result:
+    - field: execution_trace_id
+      type: string
+      description: "ID of the ExecutionTrace record"
+
+    - field: execution_trace_json
+      type: string
+      description: "Full ExecutionTrace as JSON"
+
+    - field: success_rate
+      type: float
+      description: "Percentage of steps completed successfully [0.0-1.0]"
+
+    - field: safety_incidents
+      type: int
+      description: "Count of collisions or safety violations"
+
+  # Action feedback (streamed to client during execution)
+  feedback:
+    - field: current_step_index
+      type: int
+      description: "Which step is currently executing"
+
+    - field: current_step_status
+      type: string
+      description: "'EXECUTING', 'SUCCESS', 'FAILED', 'TIMEOUT', 'WAITING_FOR_USER'"
+
+    - field: elapsed_seconds
+      type: float
+      description: "Time elapsed since execution started"
+
+    - field: estimated_remaining_seconds
+      type: float
+      description: "Estimated time to completion"
+
+    - field: status_message
+      type: string
+      description: "Human-readable status"
+
+---
+
+# Step Execution Contracts by Action Type
+
+action_contracts:
+
+  # 1. NAVIGATE step
+  navigate_step:
+    action_type: "navigate"
+    ros2_action: /navigation/SendGoal
+    parameters:
+      - field: target_location
+        type: string
+        description: "Named location or GPS coordinates"
+        example: "kitchen_table"
+
+      - field: approach_distance
+        type: float
+        description: "Stop distance from goal (meters)"
+        default: 0.5
+        constraints: "0.1-2.0m"
+
+      - field: timeout_seconds
+        type: int
+        description: "Max time to reach target"
+        default: 30
+        constraints: "5-60 seconds"
+
+    expected_outcome: "Robot at [target_location] ± [approach_distance]m"
+
+    failure_modes:
+      - code: "PATH_BLOCKED"
+        description: "No valid path found; obstacle in way"
+        recovery: "Retry, or request user assistance"
+
+      - code: "LOCALIZATION_LOST"
+        description: "Robot lost odometry/localization"
+        recovery: "Request manual intervention"
+
+      - code: "TIMEOUT"
+        description: "Navigation exceeded timeout"
+        recovery: "Retry with longer timeout, or skip"
+
+  # 2. PERCEIVE step
+  perceive_step:
+    action_type: "perceive"
+    ros2_service: /perception/DetectObject
+    parameters:
+      - field: object_class
+        type: string
+        description: "Object type to search for"
+        example: "cube"
+        constraints: "Must be trained class in vision model"
+
+      - field: color
+        type: string
+        description: "Optional color filter"
+        example: "red"
+        constraints: "common color names"
+
+      - field: confidence_threshold
+        type: float
+        description: "Min confidence to accept detection [0.0-1.0]"
+        default: 0.7
+        constraints: "0.5-0.99"
+
+      - field: timeout_seconds
+        type: int
+        description: "Max time to search"
+        default: 10
+
+    response:
+      - field: detected
+        type: bool
+
+      - field: object_pose
+        type: geometry_msgs/PoseStamped
+        description: "3D position and orientation"
+
+      - field: confidence_score
+        type: float
+        description: "Detection confidence"
+
+    expected_outcome: "Object detected with pose [x, y, z]"
+
+    failure_modes:
+      - code: "OBJECT_NOT_FOUND"
+        description: "Object not in view or not recognized"
+        recovery: "Navigate to different location, retry, or request help"
+
+      - code: "LOW_CONFIDENCE"
+        description: "Detected but confidence < threshold"
+        recovery: "Ignore detection, continue searching"
+
+  # 3. MANIPULATE step
+  manipulate_step:
+    action_type: "manipulate"
+    ros2_action: /arm_controller/PerformAction
+    parameters:
+      - field: action
+        type: string
+        description: "Type of manipulation"
+        enum: ["grasp", "release", "push", "place"]
+        example: "grasp"
+
+      - field: object_id
+        type: string
+        description: "Which object to manipulate"
+        example: "red_cube"
+
+      - field: force
+        type: float
+        description: "Grip force [0.0-1.0] (0=soft, 1=maximum)"
+        default: 0.7
+        constraints: "0.0-1.0"
+
+      - field: timeout_seconds
+        type: int
+        description: "Max time for manipulation"
+        default: 10
+
+    response:
+      - field: success
+        type: bool
+
+      - field: gripper_state
+        type: string
+        enum: ["open", "closed", "unknown"]
+
+    expected_outcome: "Object [action]ed successfully"
+
+    failure_modes:
+      - code: "GRIPPER_ERROR"
+        description: "Gripper failed to close/open"
+        recovery: "Retry, or request manual intervention"
+
+      - code: "OBJECT_DROPPED"
+        description: "Object slipped during manipulation"
+        recovery: "Attempt re-grasp, or continue without object"
+
+      - code: "COLLISION"
+        description: "Arm collided during movement"
+        recovery: "Safe stop, retry with reduced speed"
+
+  # 4. REQUEST_CLARIFICATION step
+  request_clarification_step:
+    action_type: "request_clarification"
+    ros2_service: /user_interface/GetUserInput
+    parameters:
+      - field: question
+        type: string
+        description: "Question to ask user"
+        example: "Which object should I pick up?"
+
+      - field: options
+        type: array[string]
+        description: "Suggested answers"
+        example: ["red_cube", "blue_sphere", "other"]
+
+      - field: timeout_seconds
+        type: int
+        description: "Wait time for user response"
+        default: 60
+
+    response:
+      - field: user_choice
+        type: string
+
+    expected_outcome: "User provided clarification"
+
+    failure_modes:
+      - code: "TIMEOUT"
+        description: "User did not respond"
+        recovery: "Fail task, or retry"
+
+---
+
+# ExecutionTrace Contract (Results)
+
+execution_trace:
+  name: ExecutionTrace
+  description: "Complete record of task plan execution"
+
+  fields:
+    - field: id
+      type: string
+      description: "UUID"
+
+    - field: plan_id
+      type: string
+      description: "Reference to executed plan"
+
+    - field: start_timestamp
+      type: timestamp
+      description: "When execution started"
+
+    - field: end_timestamp
+      type: timestamp
+      description: "When execution ended"
+
+    - field: total_duration_seconds
+      type: float
+
+    - field: executed_steps
+      type: array[ExecutedStep]
+      description: "Results for each step"
+
+    - field: success_rate
+      type: float
+      description: "Percentage of successful steps [0.0-1.0]"
+
+    - field: safety_incidents
+      type: int
+      description: "Count of safety violations"
+
+    - field: failure_reason
+      type: string | null
+      description: "Why task failed (if it did)"
+
+    - field: logs
+      type: array[string]
+      description: "Debug logs with timestamps"
+
+---
+
+# Chapter 12 Example Contracts
+
+examples:
+  - example_id: "example_01_basic_execution"
+    title: "Simple Task Execution (Single Step)"
+    inputs:
+      plan:
+        steps:
+          - step_index: 1
+            action_type: "navigate"
+            parameters:
+              target_location: "kitchen_table"
+              approach_distance: 0.5
+    expected_output:
+      executed_steps:
+        - status: "SUCCESS"
+          outcome: "Robot at kitchen_table"
+      success_rate: 1.0
+      safety_incidents: 0
+    latency_target: "<10 seconds"
+
+  - example_id: "example_02_multi_step_execution"
+    title: "Multi-Step Capstone Task"
+    inputs:
+      plan:
+        steps:
+          - action: "navigate", target: "kitchen_table"
+          - action: "perceive", object: "red_cube"
+          - action: "manipulate", action: "grasp", object: "red_cube"
+          - action: "navigate", target: "user_location"
+    expected_output:
+      executed_steps: (4 steps with status and timing)
+      success_rate: 1.0
+      total_duration_seconds: "<30 seconds"
+    latency_target: "<30 seconds"
+
+  - example_id: "example_03_error_recovery"
+    title: "Handling Step Failures and Recovery"
+    inputs:
+      plan: (same as example_02)
+      scenario: "Object not found in perceive step"
+    expected_output:
+      executed_steps:
+        - step: 1, status: "SUCCESS"
+        - step: 2, status: "FAILED", outcome: "Object not found"
+        - step: 3, status: "SKIPPED", reason: "Previous step failed"
+      success_rate: 0.33
+      failure_reason: "Perceive step failed"
+    latency_target: "<20 seconds"
+
+  - example_id: "example_04_user_intervention"
+    title: "Pausing for User Input During Execution"
+    inputs:
+      plan: (includes request_clarification step)
+      user_response: (provided after pause)
+    expected_output:
+      executed_steps:
+        - step: 2, status: "WAITING_FOR_USER"
+        - step: 2, status: "SUCCESS", outcome: "User provided: red_cube"
+      execution_trace: (complete with all steps)
+    latency_target: "<60 seconds (including user response time)"
+
+---
+
+# Chapter 12 Exercise Contracts
+
+exercises:
+  - exercise_id: "exercise_01_capstone_demo"
+    title: "Complete End-to-End Capstone Task"
+    instructions: |
+      Execute the full voice-to-action pipeline:
+      1. Say a complex command: "Bring me the red cube from the kitchen table"
+      2. System captures voice via Whisper
+      3. LLM generates task plan
+      4. Task executor runs the plan
+      5. Log execution trace
+
+      Measure and report:
+      - Transcription accuracy
+      - Plan quality (steps make sense?)
+      - Execution success rate
+      - Total end-to-end latency
+      - Any safety incidents
+    acceptance_criteria:
+      - "Complete execution trace saved"
+      - "Success rate >= 80%"
+      - "End-to-end latency < 30 seconds"
+      - "Zero safety incidents"
+      - "All logs properly formatted"
+    expected_time: "2-3 hours"

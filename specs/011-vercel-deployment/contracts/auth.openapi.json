@@ -1,0 +1,234 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Authentication API",
+    "version": "1.0.0",
+    "description": "User registration, login, and authentication endpoints"
+  },
+  "servers": [
+    {
+      "url": "https://your-project.vercel.app/api",
+      "description": "Production Vercel deployment"
+    },
+    {
+      "url": "http://localhost:3000/api",
+      "description": "Local development (vercel dev)"
+    }
+  ],
+  "paths": {
+    "/auth/signup": {
+      "post": {
+        "summary": "Register a new user",
+        "operationId": "signup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password", "full_name"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "User email (must be unique)"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6,
+                    "description": "Password (min 6 chars, must contain 1 letter + 1 number)"
+                  },
+                  "full_name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 255,
+                    "description": "User's full name"
+                  },
+                  "software_background": {
+                    "type": "string",
+                    "enum": ["beginner", "intermediate", "advanced"],
+                    "description": "Software experience level (optional)"
+                  },
+                  "hardware_background": {
+                    "type": "string",
+                    "enum": ["none", "some", "robotics-specific"],
+                    "description": "Hardware experience level (optional)"
+                  },
+                  "ros_experience": {
+                    "type": "string",
+                    "enum": ["none", "basic", "proficient"],
+                    "description": "ROS experience level (optional)"
+                  },
+                  "python_level": {
+                    "type": "string",
+                    "enum": ["beginner", "intermediate", "advanced"],
+                    "description": "Python skill level (optional)"
+                  },
+                  "learning_goal": {
+                    "type": "string",
+                    "enum": ["career", "research", "hobby", "certification"],
+                    "description": "Learning goal (optional)"
+                  },
+                  "available_hardware": {
+                    "type": "string",
+                    "description": "Available hardware (optional)"
+                  }
+                }
+              },
+              "example": {
+                "email": "student@gmail.com",
+                "password": "Test123",
+                "full_name": "John Doe",
+                "software_background": "beginner",
+                "learning_goal": "career"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                },
+                "example": {
+                  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  "token_type": "bearer",
+                  "expires_in": 604800
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "detail": "Password must contain at least 1 number"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email already registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "detail": "Email already registered"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/auth/signin": {
+      "post": {
+        "summary": "Authenticate user with email and password",
+        "operationId": "signin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "User email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "User password"
+                  },
+                  "remember_me": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Extend token expiration to 30 days"
+                  }
+                }
+              },
+              "example": {
+                "email": "student@gmail.com",
+                "password": "Test123",
+                "remember_me": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signin successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid email or password"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TokenResponse": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "JWT access token (valid for 7 or 30 days)"
+          },
+          "token_type": {
+            "type": "string",
+            "enum": ["bearer"],
+            "description": "Token type (always 'bearer')"
+          },
+          "expires_in": {
+            "type": "integer",
+            "description": "Token expiration in seconds"
+          }
+        },
+        "required": ["access_token", "token_type", "expires_in"]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "Error message"
+          }
+        },
+        "required": ["detail"]
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token in Authorization header: Authorization: Bearer <token>"
+      }
+    }
+  }
+}

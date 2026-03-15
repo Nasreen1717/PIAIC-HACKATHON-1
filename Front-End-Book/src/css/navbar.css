@@ -1,0 +1,865 @@
+/**
+ * Professional Navbar Styling
+ * White background, minimal design, responsive
+ */
+
+/* Main Navbar Container - Professional Polish */
+.navbar {
+  background: var(--ifm-navbar-background-color) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  padding: 0 16px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  height: 64px !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100%;
+  overflow: visible !important;
+  backdrop-filter: blur(10px);
+}
+
+.navbar__inner {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: nowrap !important;
+  padding: 0 !important;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  height: 64px;
+  gap: 4px !important;
+  overflow: visible !important;
+}
+
+/* Logo Section (Left) - Professional */
+.navbar__brand {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  min-width: 0 !important;
+  flex-shrink: 0 !important;
+  margin: 0 !important;
+  padding: 8px 0 !important;
+  margin-right: 12px !important;
+  height: 64px;
+  max-width: none !important;
+  overflow: visible !important;
+}
+
+.navbar__logo {
+  height: 36px !important;
+  width: auto !important;
+  max-width: 110px !important;
+  margin: 0 !important;
+  margin-right: 12px !important;
+  padding: 0 !important;
+  display: block !important;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.navbar__logo img {
+  height: 100% !important;
+  width: auto !important;
+  display: block !important;
+}
+
+.navbar__title {
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  color: var(--ifm-navbar-link-color) !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  letter-spacing: -0.02em !important;
+  display: block !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Items Container - CENTER - Professional */
+.navbar__items {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 1 !important;
+  flex-wrap: nowrap !important;
+  gap: 2px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: 64px;
+  min-width: 0 !important;
+  overflow: visible !important;
+  min-width: fit-content !important;
+}
+
+/* Individual Navigation Items - Professional */
+.navbar__item {
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  height: 64px;
+  flex-shrink: 0 !important;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.navbar__link {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  text-transform: capitalize !important;
+  letter-spacing: -0.01em !important;
+  color: var(--ifm-navbar-link-color) !important;
+  text-decoration: none;
+  padding: 0 10px !important;
+  position: relative;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+/* Navbar Link Hover Animation - Professional */
+.navbar__link::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--ifm-color-primary) !important;
+  transition: width 0.3s ease;
+}
+
+.navbar__link:hover {
+  color: var(--ifm-color-primary) !important;
+  text-decoration: none;
+}
+
+.navbar__link:hover::after {
+  width: 100% !important;
+}
+
+.navbar__link--active {
+  color: var(--ifm-color-primary) !important;
+  font-weight: 600;
+}
+
+.navbar__link--active::after {
+  width: 100% !important;
+}
+
+/* Demo Button - Enhanced */
+.nav-demo-button {
+  background: #14b8a6 !important;
+  color: #ffffff !important;
+  padding: 6px 14px !important;
+  border-radius: 5px !important;
+  font-size: 8px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.02em !important;
+  border: none !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  margin: 0 !important;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.15) !important;
+  min-height: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.nav-demo-button:hover {
+  background: #0d9488 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(20, 184, 166, 0.3) !important;
+}
+
+.nav-demo-button:focus-visible {
+  outline: 2px solid #0d9488 !important;
+  outline-offset: 2px !important;
+}
+
+/* Right Items Container - Professional */
+.navbar__items--right {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  flex-wrap: nowrap !important;
+  gap: 6px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+  height: 64px;
+  overflow: visible !important;
+}
+
+/* Mobile Menu */
+.navbar-sidebar {
+  background: var(--ifm-background-surface-color);
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.3s ease;
+}
+
+.navbar-sidebar__brand {
+  padding: 20px 24px;
+}
+
+.navbar-sidebar__items {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.navbar-sidebar__item {
+  padding: 0;
+  margin: 0;
+}
+
+.navbar-sidebar__item .navbar__link {
+  display: block;
+  padding: 16px 24px !important;
+  color: var(--ifm-navbar-link-color) !important;
+  font-size: 14px;
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.navbar-sidebar__item .navbar__link:hover {
+  background: var(--ifm-background-color-secondary);
+  color: var(--ifm-navbar-link-hover-color) !important;
+}
+
+.navbar-sidebar .nav-demo-button {
+  margin: 20px 24px !important;
+  width: calc(100% - 48px);
+  text-align: center;
+}
+
+/* Toggle Button (Hamburger) */
+.navbar__toggle {
+  display: none;
+}
+
+.navbar__toggle.navbar__toggle--active {
+  background: none;
+  border: none;
+}
+
+.navbar__toggle button {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.navbar__toggle button span {
+  width: 24px;
+  height: 2px;
+  background: var(--ifm-navbar-link-color);
+  border-radius: 1px;
+  transition: all 0.3s ease;
+}
+
+.navbar__toggle.navbar__toggle--active button span:nth-child(1) {
+  transform: rotate(45deg) translate(8px, 8px);
+}
+
+.navbar__toggle.navbar__toggle--active button span:nth-child(2) {
+  opacity: 0;
+}
+
+.navbar__toggle.navbar__toggle--active button span:nth-child(3) {
+  transform: rotate(-45deg) translate(8px, -8px);
+}
+
+/* Responsive Design - Professional */
+@media (max-width: 1200px) {
+  .navbar {
+    height: 60px !important;
+    padding: 0 16px !important;
+  }
+
+  .navbar__inner {
+    height: 60px;
+    gap: 4px !important;
+  }
+
+  .navbar__brand {
+    height: 60px;
+    margin-right: 12px !important;
+  }
+
+  .navbar__logo {
+    height: 28px !important;
+    max-width: 90px !important;
+  }
+
+  .navbar__title {
+    font-size: 14px !important;
+  }
+
+  .navbar__items {
+    gap: 1px !important;
+    height: 60px;
+  }
+
+  .navbar__item {
+    height: 60px;
+  }
+
+  .navbar__link {
+    font-size: 12px !important;
+    padding: 0 8px !important;
+  }
+
+  .navbar__items--right {
+    gap: 4px !important;
+    height: 60px;
+  }
+
+  .nav-signin-button,
+  .nav-signup-button {
+    min-height: 32px;
+    height: 32px;
+    padding: 4px 10px !important;
+    font-size: 12px !important;
+  }
+
+  button[class*='toggleButton'],
+  .colorModeToggle_node_modules-\@docusaurus-theme-classic-lib-theme-ColorModeToggle-styles-module button,
+  [class*='toggle'][class*='button'] {
+    height: 32px;
+    width: 32px;
+    min-height: 32px;
+    min-width: 32px;
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 996px) {
+  .navbar {
+    height: 56px !important;
+    padding: 0 12px !important;
+  }
+
+  .navbar__inner {
+    height: 56px;
+    gap: 3px !important;
+  }
+
+  .navbar__brand {
+    height: 56px;
+    margin-right: 8px !important;
+  }
+
+  .navbar__logo {
+    height: 26px !important;
+    max-width: 80px !important;
+    margin-right: 6px !important;
+  }
+
+  .navbar__title {
+    font-size: 13px !important;
+  }
+
+  .navbar__items {
+    gap: 0px !important;
+    height: 56px;
+  }
+
+  .navbar__item {
+    height: 56px;
+  }
+
+  .navbar__link {
+    font-size: 11px !important;
+    padding: 0 6px !important;
+  }
+
+  .navbar__items--right {
+    gap: 3px !important;
+    height: 56px;
+  }
+
+  .nav-signin-button,
+  .nav-signup-button {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    height: 30px;
+    min-height: 30px;
+  }
+
+  button[class*='toggleButton'],
+  .colorModeToggle_node_modules-\@docusaurus-theme-classic-lib-theme-ColorModeToggle-styles-module button,
+  [class*='toggle'][class*='button'] {
+    height: 30px;
+    width: 30px;
+    min-height: 30px;
+    min-width: 30px;
+    font-size: 0.9rem;
+  }
+
+  .navbar__toggle {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    height: 52px !important;
+  }
+
+  .navbar__inner {
+    padding: 0 10px !important;
+    height: 52px;
+    gap: 2px !important;
+  }
+
+  .navbar__brand {
+    height: 52px;
+    margin-right: 6px !important;
+  }
+
+  .navbar__logo {
+    height: 24px !important;
+    width: auto !important;
+    max-width: 70px !important;
+  }
+
+  .navbar__item {
+    height: 52px;
+  }
+
+  .navbar__link {
+    font-size: 10px !important;
+    padding: 0 5px !important;
+  }
+
+  .navbar__items {
+    gap: 0px !important;
+    padding: 0 2px !important;
+    height: 52px;
+  }
+
+  .navbar__items--right {
+    gap: 2px !important;
+    height: 52px;
+  }
+
+  .nav-signin-button,
+  .nav-signup-button,
+  .nav-demo-button {
+    padding: 3px 7px !important;
+    font-size: 10px !important;
+    height: 26px;
+    min-height: 26px;
+  }
+
+  button[class*='toggleButton'],
+  .colorModeToggle_node_modules-\@docusaurus-theme-classic-lib-theme-ColorModeToggle-styles-module button,
+  [class*='toggle'][class*='button'] {
+    height: 26px;
+    width: 26px;
+    min-height: 26px;
+    min-width: 26px;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar {
+    height: 48px !important;
+  }
+
+  .navbar__inner {
+    padding: 0 8px !important;
+    height: 48px;
+    gap: 1px !important;
+  }
+
+  .navbar__brand {
+    height: 48px;
+    margin-right: 4px !important;
+  }
+
+  .navbar__logo {
+    height: 22px !important;
+    width: auto !important;
+    max-width: 65px !important;
+  }
+
+  .navbar__item {
+    height: 48px;
+  }
+
+  .navbar__link {
+    font-size: 9px !important;
+    padding: 0 4px !important;
+  }
+
+  .navbar__items {
+    gap: 0px !important;
+    padding: 0 1px !important;
+    height: 48px;
+  }
+
+  .navbar__items--right {
+    gap: 2px !important;
+    height: 48px;
+  }
+
+  .nav-signin-button,
+  .nav-signup-button,
+  .nav-demo-button {
+    padding: 2px 6px !important;
+    font-size: 9px !important;
+    height: 24px;
+    min-height: 24px;
+  }
+
+  button[class*='toggleButton'],
+  .colorModeToggle_node_modules-\@docusaurus-theme-classic-lib-theme-ColorModeToggle-styles-module button,
+  [class*='toggle'][class*='button'] {
+    height: 24px;
+    width: 24px;
+    min-height: 24px;
+    min-width: 24px;
+    font-size: 0.7rem;
+  }
+}
+
+/* Remove default Docusaurus styles */
+.navbar__separator {
+  display: none !important;
+}
+
+.navbar__item.dropdown {
+  position: static;
+}
+
+.navbar__item.dropdown:hover .dropdown__menu {
+  display: none;
+}
+
+/* Dropdown styling (if needed for future use) */
+.dropdown__menu {
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  margin-top: 8px;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.dropdown__link {
+  color: var(--ifm-navbar-link-color);
+  padding: 10px 16px;
+  font-size: 13px;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.dropdown__link:hover {
+  background: var(--ifm-background-color-secondary);
+  color: var(--ifm-navbar-link-hover-color);
+}
+
+/* Ensure proper spacing and alignment */
+.navbar__inner > * {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Sign In Button - Professional Text Only */
+.nav-signin-button {
+  background: transparent !important;
+  color: var(--ifm-navbar-link-color) !important;
+  padding: 6px 12px !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  text-transform: capitalize !important;
+  letter-spacing: -0.01em !important;
+  border: none !important;
+  transition: all 0.2s ease;
+  margin: 0 !important;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none !important;
+  min-height: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.nav-signin-button:hover {
+  background: rgba(13, 148, 136, 0.08) !important;
+  color: var(--ifm-color-primary) !important;
+  border: none !important;
+  box-shadow: none !important;
+  transform: none;
+}
+
+.nav-signin-button:focus-visible {
+  outline: 2px solid var(--ifm-color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* Sign Up Button - Professional Primary */
+.nav-signup-button {
+  background: var(--ifm-color-primary) !important;
+  color: #ffffff !important;
+  padding: 6px 14px !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  text-transform: capitalize !important;
+  letter-spacing: -0.01em !important;
+  border: none !important;
+  transition: all 0.2s ease;
+  margin: 0 !important;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.25) !important;
+  min-height: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.nav-signup-button:hover {
+  background: #0a7c6f !important;
+  box-shadow: 0 6px 16px rgba(13, 148, 136, 0.4) !important;
+  transform: translateY(-2px);
+}
+
+.nav-signup-button:focus-visible {
+  outline: 2px solid #ffffff !important;
+  outline-offset: 2px !important;
+}
+
+/* Note: Button responsive styles moved to per-breakpoint media queries above */
+
+/* ============================================================================
+   DARK MODE STYLES FOR NAVBAR
+   ============================================================================ */
+
+[data-theme='dark'] .navbar {
+  background: var(--ifm-navbar-background-color) !important;
+  border-bottom-color: var(--color-border) !important;
+}
+
+[data-theme='dark'] .navbar__link {
+  color: var(--ifm-navbar-link-color) !important;
+}
+
+[data-theme='dark'] .navbar__link:hover,
+[data-theme='dark'] .navbar__link.navbar__link--active {
+  color: var(--ifm-navbar-link-hover-color) !important;
+}
+
+[data-theme='dark'] .navbar-sidebar {
+  background: var(--ifm-background-surface-color);
+}
+
+[data-theme='dark'] .navbar-sidebar__item .navbar__link {
+  color: var(--ifm-navbar-link-color) !important;
+  border-bottom-color: var(--color-border);
+}
+
+[data-theme='dark'] .navbar-sidebar__item .navbar__link:hover {
+  background: var(--ifm-background-color-secondary);
+  color: var(--ifm-navbar-link-hover-color) !important;
+}
+
+[data-theme='dark'] .dropdown__menu {
+  background: var(--ifm-background-surface-color);
+  border-color: var(--color-border);
+}
+
+[data-theme='dark'] .dropdown__link {
+  color: var(--ifm-navbar-link-color);
+}
+
+[data-theme='dark'] .dropdown__link:hover {
+  background: var(--ifm-background-color-secondary);
+  color: var(--ifm-navbar-link-hover-color);
+}
+
+[data-theme='dark'] .nav-signin-button {
+  background: var(--ifm-button-background-color) !important;
+  border-color: var(--ifm-button-background-color) !important;
+  color: var(--ifm-color-on-primary) !important;
+}
+
+[data-theme='dark'] .nav-signin-button:hover {
+  background: var(--ifm-button-hover-background-color) !important;
+  border-color: var(--ifm-button-hover-background-color) !important;
+}
+
+[data-theme='dark'] .nav-signup-button {
+  background: var(--ifm-button-background-color) !important;
+  border-color: var(--ifm-button-background-color) !important;
+}
+
+[data-theme='dark'] .nav-signup-button:hover {
+  background: var(--ifm-button-hover-background-color) !important;
+  border-color: var(--ifm-button-hover-background-color) !important;
+}
+
+/* ============================================================================
+   THEME TOGGLE BUTTON STYLING - Light/Dark Mode Switch (Beautiful Design)
+   ============================================================================ */
+
+/* Theme toggle container alignment */
+.navbar__items--right {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: var(--spacing-sm) !important;
+  margin: 0 !important;
+  padding: 0 var(--spacing-sm) !important;
+  flex-shrink: 0 !important;
+  height: 64px;
+}
+
+/* Theme toggle button - Professional */
+button[class*='toggleButton'],
+.colorModeToggle_node_modules-\@docusaurus-theme-classic-lib-theme-ColorModeToggle-styles-module button {
+  color: var(--ifm-navbar-link-color) !important;
+  transition: all 0.2s ease;
+  min-height: 36px;
+  min-width: 36px;
+  height: 36px;
+  width: 36px;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px;
+  background: rgba(13, 148, 136, 0.05);
+  border: 1px solid rgba(13, 148, 136, 0.1);
+  cursor: pointer;
+  padding: 0 !important;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+button[class*='toggleButton']:hover,
+.colorModeToggle_node_modules-\@docusaurus-theme-classic-lib-theme-ColorModeToggle-styles-module button:hover {
+  color: var(--ifm-color-primary) !important;
+  background: rgba(13, 148, 136, 0.1) !important;
+  border-color: rgba(13, 148, 136, 0.2) !important;
+  transform: none;
+  box-shadow: none;
+  transition: all 0.2s ease;
+}
+
+button[class*='toggleButton']:active,
+.colorModeToggle_node_modules-\@docusaurus-theme-classic-lib-theme-ColorModeToggle-styles-module button:active {
+  transform: scale(0.95) !important;
+}
+
+button[class*='toggleButton']:focus-visible,
+.colorModeToggle_node_modules-\@docusaurus-theme-classic-lib-theme-ColorModeToggle-styles-module button:focus-visible {
+  outline: 2px solid var(--ifm-color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* Dark mode theme toggle styling */
+[data-theme='dark'] button[class*='toggleButton'],
+[data-theme='dark'] .colorModeToggle_node_modules-\@docusaurus-theme-classic-lib-theme-ColorModeToggle-styles-module button {
+  color: #fbbf24 !important;
+  background: rgba(251, 191, 36, 0.08) !important;
+  border-color: rgba(251, 191, 36, 0.15) !important;
+}
+
+[data-theme='dark'] button[class*='toggleButton']:hover,
+[data-theme='dark'] .colorModeToggle_node_modules-\@docusaurus-theme-classic-lib-theme-ColorModeToggle-styles-module button:hover {
+  background: rgba(251, 191, 36, 0.15) !important;
+  border-color: rgba(251, 191, 36, 0.3) !important;
+  color: #fbbf24 !important;
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.1);
+}
+
+/* Legacy selectors for compatibility - Professional */
+.navbar__item.navbar__item--colorModeToggle {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 64px;
+  padding: 0 4px !important;
+  margin: 0 !important;
+  position: relative;
+  z-index: 100;
+  flex-shrink: 0;
+  overflow: visible !important;
+}
+
+[class*='toggle'][class*='button'] {
+  color: var(--ifm-navbar-link-color) !important;
+  transition: all 0.2s ease;
+  min-height: 40px;
+  min-width: 40px;
+  height: 40px;
+  width: 40px;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 8px;
+  background: rgba(13, 148, 136, 0.05);
+  border: 1px solid rgba(13, 148, 136, 0.1);
+  cursor: pointer;
+  padding: 0 !important;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+[class*='toggle'][class*='button']:hover {
+  color: var(--ifm-color-primary) !important;
+  background: rgba(13, 148, 136, 0.1) !important;
+  border-color: rgba(13, 148, 136, 0.2) !important;
+  transform: none;
+  box-shadow: none;
+  transition: all 0.2s ease;
+}
+
+[class*='toggle'][class*='button']:active {
+  transform: scale(0.95) !important;
+}
+
+[class*='toggle'][class*='button']:focus-visible {
+  outline: 2px solid var(--ifm-color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+[data-theme='dark'] [class*='toggle'][class*='button'] {
+  color: #fbbf24 !important;
+  background: rgba(251, 191, 36, 0.08) !important;
+  border-color: rgba(251, 191, 36, 0.15) !important;
+}
+
+[data-theme='dark'] [class*='toggle'][class*='button']:hover {
+  background: rgba(251, 191, 36, 0.15) !important;
+  border-color: rgba(251, 191, 36, 0.3) !important;
+  color: #fbbf24 !important;
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.1);
+}

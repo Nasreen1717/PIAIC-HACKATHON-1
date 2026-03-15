@@ -1,0 +1,137 @@
+.navbarWrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* Auth Container - Injected into navbar items--right section */
+.navbarAuthInline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 64px;
+  z-index: 100;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
+.navbarAuthInline :global(*) {
+  position: relative;
+  z-index: 100;
+  height: 64px;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.navbarAuthInline :global(.container) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 64px;
+  white-space: nowrap;
+  padding: 0;
+  margin: 0;
+  flex-wrap: nowrap;
+}
+
+.navbarAuthInline :global(.signinLink),
+.navbarAuthInline :global(.signupLink) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  overflow: visible !important;
+}
+
+/* Medium screens */
+@media (max-width: 1200px) {
+  .navbarAuthInline {
+    gap: 3px;
+    height: 60px;
+  }
+
+  .navbarAuthInline :global(*) {
+    height: 60px;
+  }
+
+  .navbarAuthInline :global(.container) {
+    gap: 3px;
+    height: 60px;
+  }
+
+  .navbarAuthInline :global(.signinLink),
+  .navbarAuthInline :global(.signupLink) {
+    height: 32px;
+  }
+}
+
+/* Tablet screens */
+@media (max-width: 996px) {
+  .navbarAuthInline {
+    gap: 2px;
+    height: 56px;
+  }
+
+  .navbarAuthInline :global(*) {
+    height: 56px;
+  }
+
+  .navbarAuthInline :global(.container) {
+    gap: 2px;
+    height: 56px;
+  }
+
+  .navbarAuthInline :global(.signinLink),
+  .navbarAuthInline :global(.signupLink) {
+    height: 30px;
+  }
+}
+
+/* Mobile screens */
+@media (max-width: 768px) {
+  .navbarAuthInline {
+    gap: 2px;
+    height: 52px;
+  }
+
+  .navbarAuthInline :global(*) {
+    height: 52px;
+  }
+
+  .navbarAuthInline :global(.container) {
+    gap: 2px;
+    height: 52px;
+  }
+
+  .navbarAuthInline :global(.signinLink),
+  .navbarAuthInline :global(.signupLink) {
+    height: 26px;
+  }
+}
+
+/* Small screens */
+@media (max-width: 480px) {
+  .navbarAuthInline {
+    gap: 1px;
+    height: 48px;
+  }
+
+  .navbarAuthInline :global(*) {
+    height: 48px;
+  }
+
+  .navbarAuthInline :global(.container) {
+    gap: 1px;
+    height: 48px;
+  }
+
+  .navbarAuthInline :global(.signinLink),
+  .navbarAuthInline :global(.signupLink) {
+    height: 24px;
+  }
+}

@@ -1,0 +1,71 @@
+tree 13851fd8ae093a8904a38eac8bae3c19e7c7045e
+parent 4fc6822af2270bd69cfd821d9f57fe79454ed6fc
+author Narseen1717 <hoorainmahtab@gmail.com> 1770064942 +0500
+committer Narseen1717 <hoorainmahtab@gmail.com> 1770064942 +0500
+
+CRITICAL FIX: Comprehensive RAG system overhaul - fix citation URLs and add system diagnostics
+
+PART 1: Citation System Complete Rewrite
+- Created explicit citation_url_mapping.py with all 12 chapters + reference files
+- All URLs validated against actual Docusaurus file structure
+- Mapping includes: chapters 1-12, module intros, READMEs, glossaries
+- Chapter 7-9: Correct handling of .mdx files (isaac-sim, isaac-ros, nav2-bipedal)
+- Chapter 10-12: Correct handling of voice-to-action and planning chapters
+
+- Updated citation_formatter.py to use mapping (not dynamic generation)
+- Ensures URL correctness and consistency
+- Added fallback mechanism for edge cases
+- All 16 test URLs (12 chapters + 4 intros) validated ✓
+
+PART 2: Schema Enhancement
+- Added 'url' field to Citation schema
+- Citations now returned with full Docusaurus paths
+- Format: /docs/module-X/chapter-Y#section-id or /docs/module-X/intro#section-id
+
+PART 3: Debug Endpoints & Logging
+- Created debug.py API endpoints:
+  * GET /api/v1/debug/health - System health check
+  * GET /api/v1/debug/vector-store-status - Qdrant collection info
+  * GET /api/v1/debug/citation-urls - Validate all citation URLs
+  * POST /api/v1/debug/test-search - Test vector search with cascading thresholds
+
+- Added comprehensive logging:
+  * Vector search queries and top results
+  * Citation URL generation with validation
+  * Failed searches logged for debugging
+
+PART 4: Citation Validation in Chat Endpoint
+- Each citation now generates and validates its URL
+- URL included in Citation response
+- Detailed logging of citation generation process
+- Fallback mechanism if URL generation fails
+
+VERIFICATION:
+✓ All 12 chapters validated
+✓ All 4 module intros validated
+✓ All URLs follow correct format
+✓ Citation response includes url field
+✓ Debug endpoints operational
+✓ Test query returns proper URLs in citations
+
+Citations now return:
+{
+  "chapter_number": 0,
+  "section_id": "1.2",
+  "section_title": "What is ROS 2?",
+  "url": "/docs/module-1/intro#1-2",
+  "similarity_score": 0.68,
+  ...
+}
+
+Files Added:
+- backend/app/utils/citation_url_mapping.py (explicit mapping, 200+ lines)
+- backend/app/api/v1/debug.py (debug endpoints, 190+ lines)
+
+Files Modified:
+- backend/app/utils/citation_formatter.py (use mapping instead of dynamic generation)
+- backend/app/schemas/chat.py (add url field to Citation)
+- backend/app/api/v1/chat.py (add logging, URL generation, validation)
+- backend/app/main.py (register debug router)
+
+Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>

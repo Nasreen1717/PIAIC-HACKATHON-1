@@ -1,0 +1,1207 @@
+---
+title: Chapter 11 - Cognitive Planning with Large Language Models
+sidebar_label: Chapter 11 Cognitive Planning
+sidebar_position: 2
+---
+
+# Chapter 11: Cognitive Planning with LLMs - Task Decomposition & Validation
+
+## Learning Objectives
+
+By the end of this chapter, you will:
+
+- ✅ Understand LLM-based task decomposition and natural language reasoning
+- ✅ Implement GPT-4 function calling for structured plan generation
+- ✅ Design robot capability models and action schemas for LLM grounding
+- ✅ Validate generated plans for executability and safety constraints
+- ✅ Handle ambiguous goals and implement error recovery strategies
+
+**Estimated time**: 12-15 hours
+**Difficulty**: Advanced
+**Prerequisites**: Chapter 10 (Module 4 foundation), Python OOP, JSON/YAML familiarity
+
+---
+
+## 1. Natural Language to Executable Plans
+
+### 1.1 The Task Decomposition Problem
+
+**Task Decomposition** is the cognitive process of breaking down a high-level goal into executable steps. For example:
+
+**Goal**: "Bring me the red cube from the kitchen table"
+
+**Decomposed Plan**:
+1. Navigate to kitchen (parameter: location="kitchen")
+2. Perceive objects on table (parameter: location="table", target="red cube")
+3. Grasp the red cube (parameter: object_id=&lt;from step 2&gt;)
+4. Navigate back to user (parameter: location="user_location")
+5. Release object to user (parameter: object_id=&lt;from step 3&gt;)
+
+**Cognitive Pipeline**:
+
+```
+┌──────────────────────────┐
+│  Natural Language Goal   │
+│  "bring me red cube..."  │
+└────────┬─────────────────┘
+         │
+         ↓
+┌──────────────────────────────────┐
+│  LLM (GPT-4) Analysis            │
+│  • Understand user intent        │
+│  • Extract constraints & context │
+│  • Decompose into steps          │
+└────────┬─────────────────────────┘
+         │
+         ↓
+┌──────────────────────────────────┐
+│  Function Calling                │
+│  • Map steps to robot actions    │
+│  • Generate JSON parameters      │
+│  • Validate against schema       │
+└────────┬─────────────────────────┘
+         │
+         ↓
+┌──────────────────────────────────┐
+│  Plan Validation                 │
+│  • Check step ordering           │
+│  • Verify action types           │
+│  • Test parameter constraints    │
+└────────┬─────────────────────────┘
+         │
+         ↓
+┌──────────────────────────────────┐
+│  Executable Task Plan            │
+│  [Navigation, Perception, ...]   │
+└──────────────────────────────────┘
+```
+
+### 1.2 LLM Confidence & Limitations
+
+**When LLMs Succeed**:
+- Clear, well-specified goals ("pick up the red object on the table")
+- Tasks within robot's known capabilities (navigation, grasping, perception)
+- Sufficient context provided (room layout, object descriptions, success criteria)
+
+**When LLMs Struggle**:
+- Ambiguous goals ("help me with the task" - what task?)
+- Impossible requests ("fly to the moon" - humanoid can't fly)
+- Underspecified parameters ("move the small thing" - which thing? where to?)
+- Contradictory constraints ("move fast and carefully" - conflicting)
+
+**Confidence Rating**:
+
+| Rating | Indicator | Action |
+|--------|-----------|--------|
+| **High** | Single clear decomposition, all steps executable | Execute plan immediately |
+| **Medium** | Multiple possible interpretations, some steps unclear | Request clarification on key parameter |
+| **Low** | Goal ambiguous, missing critical information | Ask user to rephrase with more detail |
+
+---
+
+## 2. LLM Function Calling Architecture
+
+### 2.1 Function Calling Basics
+
+**Function Calling** allows an LLM to invoke external tools by returning structured JSON. Instead of just text, the LLM returns:
+
+```json
+{
+  "function": "navigate",
+  "parameters": {
+    "destination": "kitchen",
+    "speed": "normal",
+    "avoid_obstacles": true
+  }
+}
+```
+
+**GPT-4 Function Calling Flow**:
+
+```
+1. Define robot capabilities as JSON schema
+2. Submit goal + schema to GPT-4 API
+3. GPT-4 returns function calls (structured JSON)
+4. Parse and validate function calls
+5. Execute functions in order
+6. Return results to GPT-4 (for next step)
+```
+
+### 2.2 Defining Robot Capabilities
+
+**Robot Capability Schema** describes what a robot can do:
+
+```yaml
+capabilities:
+  - name: navigate
+    description: "Move robot to specified location"
+    parameters:
+      - name: destination
+        type: string
+        description: "Target location (kitchen, bedroom, living_room, etc.)"
+        enum: ["kitchen", "bedroom", "living_room", "hallway", "bathroom"]
+      - name: speed
+        type: string
+        default: "normal"
+        enum: ["slow", "normal", "fast"]
+      - name: avoid_obstacles
+        type: boolean
+        default: true
+    expected_duration_seconds: 5.0
+    success_criteria: "Robot reaches destination without collision"
+
+  - name: perceive
+    description: "Detect and identify objects in view"
+    parameters:
+      - name: location
+        type: string
+        description: "Location to scan (on_table, on_shelf, on_floor, etc.)"
+      - name: target_object
+        type: string
+        description: "Object description (red cube, blue bottle, etc.)"
+    returns:
+      - field: object_id
+        type: string
+        description: "Unique identifier for found object"
+      - field: position
+        type: [float, float, float]
+        description: "3D coordinates [x, y, z] in meters"
+    expected_duration_seconds: 2.0
+
+  - name: manipulate
+    description: "Grasp and move objects"
+    parameters:
+      - name: object_id
+        type: string
+        description: "Object identifier from perceive action"
+      - name: action
+        type: string
+        enum: ["grasp", "release", "rotate", "lift"]
+      - name: target_location
+        type: string
+        description: "Where to place object"
+    expected_duration_seconds: 3.0
+```
+
+### 2.3 System Prompt Engineering
+
+The **System Prompt** provides context and instructions to the LLM:
+
+```python
+system_prompt = """
+You are a task planning assistant for a humanoid robot.
+Given a natural language goal, decompose it into executable steps.
+
+Available robot actions:
+- navigate(destination, speed='normal', avoid_obstacles=True)
+- perceive(location, target_object)
+- manipulate(object_id, action, target_location)
+- request_clarification(question, options=[])
+
+Always return a JSON array of function calls in order.
+Example response:
+[
+  {"function": "navigate", "parameters": {"destination": "kitchen"}},
+  {"function": "perceive", "parameters": {"location": "on_table", "target_object": "red cube"}},
+  {"function": "manipulate", "parameters": {"object_id": "obj_123", "action": "grasp", "target_location": "user"}}
+]
+
+If the goal is ambiguous, use request_clarification.
+If the goal is impossible, explain why and suggest alternatives.
+"""
+```
+
+---
+
+## 3. Robot Capability Modeling
+
+### 3.1 Action Schema Design
+
+Each robot action has a **schema** that defines:
+- Input parameters (with types, ranges, constraints)
+- Output/return values
+- Success criteria
+- Timeout/duration expectations
+
+**Example: Navigate Action Schema**:
+
+```json
+{
+  "name": "navigate",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "destination": {
+        "type": "string",
+        "enum": ["kitchen", "bedroom", "living_room", "hallway"],
+        "description": "Target location"
+      },
+      "speed": {
+        "type": "string",
+        "enum": ["slow", "normal", "fast"],
+        "default": "normal"
+      },
+      "avoid_obstacles": {
+        "type": "boolean",
+        "default": true
+      }
+    },
+    "required": ["destination"]
+  },
+  "expected_duration": 5.0,
+  "success_criteria": "Robot reaches destination",
+  "failure_modes": ["path_blocked", "collision_detected", "timeout"]
+}
+```
+
+### 3.2 Parameter Validation
+
+**Validation Rules** ensure parameters are valid before execution:
+
+```python
+class ParameterValidator:
+    """Validate action parameters against schema."""
+
+    def validate(self, action_name: str, parameters: dict) -> tuple[bool, str]:
+        """
+        Validate parameters.
+
+        Returns:
+            (is_valid, error_message)
+        """
+        schema = self.get_schema(action_name)
+
+        # ✅ Check required fields
+        for required_field in schema['required']:
+            if required_field not in parameters:
+                return False, f"Missing required parameter: {required_field}"
+
+        # ✅ Check field types and constraints
+        for param_name, param_value in parameters.items():
+            if param_name not in schema['properties']:
+                return False, f"Unknown parameter: {param_name}"
+
+            prop_schema = schema['properties'][param_name]
+
+            # Check type
+            if prop_schema['type'] == 'string' and not isinstance(param_value, str):
+                return False, f"Parameter {param_name} must be string"
+
+            # Check enum constraints
+            if 'enum' in prop_schema and param_value not in prop_schema['enum']:
+                return False, f"Parameter {param_name}={param_value} not in {prop_schema['enum']}"
+
+        return True, ""
+```
+
+---
+
+## 4. Plan Validation & Safety Checks
+
+### 4.1 Plan Structure Validation
+
+**Valid plans** have specific properties:
+
+| Property | Constraint | Example |
+|----------|-----------|---------|
+| **Number of steps** | 1-20 | [navigate, perceive, manipulate] = 3 ✅ |
+| **Step ordering** | Logical sequence | perceive BEFORE manipulate ✅ |
+| **Action types** | Valid robot actions | [navigate, perceive, manipulate, request_clarification] |
+| **Parameters** | Match schema | destination in ["kitchen", "bedroom", ...] |
+| **Duration** | Sum ≤ 30 seconds | 5s + 2s + 3s = 10s < 30s ✅ |
+
+### 4.2 Validation Logic
+
+```python
+class PlanValidator:
+    """Validate generated task plans."""
+
+    def validate_plan(self, plan: dict) -> tuple[bool, list]:
+        """
+        Validate complete plan.
+
+        Returns:
+            (is_valid, error_list)
+        """
+        errors = []
+
+        # ✅ Check step count
+        steps = plan.get('steps', [])
+        if len(steps) == 0:
+            errors.append("Plan has no steps")
+        elif len(steps) > 20:
+            errors.append(f"Plan has too many steps: {len(steps)} > 20")
+
+        # ✅ Validate each step
+        total_duration = 0
+        for i, step in enumerate(steps):
+            action_type = step.get('action_type')
+
+            # Validate action type
+            if action_type not in ['navigate', 'perceive', 'manipulate', 'request_clarification']:
+                errors.append(f"Step {i}: Invalid action_type: {action_type}")
+
+            # Validate parameters
+            is_valid, error = self.validate_parameters(action_type, step.get('parameters', {}))
+            if not is_valid:
+                errors.append(f"Step {i}: {error}")
+
+            # Accumulate duration
+            duration = step.get('timeout_seconds', 5.0)
+            total_duration += duration
+
+        # ✅ Check total duration
+        if total_duration > 30.0:
+            errors.append(f"Total plan duration {total_duration}s exceeds 30s limit")
+
+        # ✅ Check step dependencies
+        for i, step in enumerate(steps):
+            if step['action_type'] == 'manipulate':
+                # Manipulate should follow perceive (to get object_id)
+                if i == 0 or all(s['action_type'] != 'perceive' for s in steps[:i]):
+                    errors.append(f"Step {i}: manipulate should follow perceive")
+
+        return len(errors) == 0, errors
+```
+
+### 4.3 Safety Constraints
+
+**Safety Rules** prevent dangerous plans:
+
+```python
+class SafetyChecker:
+    """Check plan for safety violations."""
+
+    SAFE_SPEED_THRESHOLDS = {
+        "slow": 0.1,      # m/s
+        "normal": 0.5,    # m/s
+        "fast": 1.0       # m/s
+    }
+
+    def check_safety(self, plan: dict) -> tuple[bool, list]:
+        """
+        Check plan for safety violations.
+
+        Returns:
+            (is_safe, warning_list)
+        """
+        warnings = []
+
+        for i, step in enumerate(plan['steps']):
+            action = step['action_type']
+            params = step.get('parameters', {})
+
+            # ⚠️ Check navigation speed near obstacles
+            if action == 'navigate':
+                speed = params.get('speed', 'normal')
+                if not params.get('avoid_obstacles', True) and speed == 'fast':
+                    warnings.append(
+                        f"Step {i}: Fast navigation with obstacle avoidance disabled"
+                    )
+
+            # ⚠️ Check gripper force for delicate objects
+            if action == 'manipulate':
+                obj_type = params.get('object_type', 'unknown')
+                if obj_type in ['fragile', 'electronics'] and params.get('grip_force', 5) > 3:
+                    warnings.append(
+                        f"Step {i}: High grip force ({params['grip_force']}) on fragile object"
+                    )
+
+        return len(warnings) == 0, warnings
+```
+
+---
+
+## 5. Error Handling & Ambiguity Resolution
+
+### 5.1 Ambiguity Detection
+
+**Ambiguous Goals** lack critical information:
+
+| Goal | Issues | Fix |
+|------|--------|-----|
+| "Pick up the small thing" | Which object? Where? | "Pick up the small red cube on the kitchen table" |
+| "Move it somewhere" | Move what? Where? | "Move the cube to the bedroom" |
+| "Help with the task" | What task? | "Move the red cube from table to shelf" |
+
+**Detection Strategy**:
+```python
+def detect_ambiguity(goal: str) -> tuple[bool, list]:
+    """
+    Detect ambiguity in goal statement.
+
+    Returns:
+        (is_ambiguous, ambiguity_list)
+    """
+    ambiguities = []
+
+    # ✅ Check for pronouns without antecedents
+    if re.search(r'\b(it|them|that)\b', goal, re.IGNORECASE):
+        ambiguities.append("Pronoun reference unclear (it, them, that)")
+
+    # ✅ Check for vague object references
+    if re.search(r'\b(thing|stuff|object|item)\b', goal, re.IGNORECASE):
+        ambiguities.append("Object reference is vague")
+
+    # ✅ Check for incomplete location info
+    if re.search(r'\b(somewhere|somewhere|anywhere)\b', goal, re.IGNORECASE):
+        ambiguities.append("Destination is unspecified")
+
+    return len(ambiguities) > 0, ambiguities
+```
+
+### 5.2 Request Clarification
+
+When ambiguity detected, use a special action to ask user:
+
+```python
+clarification_response = {
+    "function": "request_clarification",
+    "parameters": {
+        "question": "Which object should I pick up?",
+        "options": [
+            "red cube on the table",
+            "blue bottle on the shelf",
+            "green mug in the kitchen"
+        ]
+    }
+}
+```
+
+### 5.3 Error Recovery Patterns
+
+| Error Type | Recovery Strategy |
+|-----------|-------------------|
+| **Path Blocked** | Retry navigation with alternate route |
+| **Object Not Found** | Expand search area; ask user for location hint |
+| **Gripper Slip** | Retry grasp with increased force or different angle |
+| **Timeout** | Skip step; ask user to intervene |
+| **LLM Rate Limit** | Queue request; retry after delay |
+
+---
+
+## 6. Plan Quality Metrics
+
+### 6.1 Defining Plan Quality
+
+**High-Quality Plans**:
+- ✅ All steps are executable (valid action types, valid parameters)
+- ✅ Steps are in logical order (perceive before manipulate)
+- ✅ Parameters are realistic (destination in known locations, grip force in valid range)
+- ✅ Expected duration is reasonable (&lt;30 seconds for typical task)
+- ✅ No redundant steps (navigating to same location twice)
+
+### 6.2 Quality Scoring
+
+```python
+class PlanQualityScorer:
+    """Score plan quality on 1-10 scale."""
+
+    def score_plan(self, plan: dict) -> int:
+        """
+        Score plan from 1 (terrible) to 10 (excellent).
+
+        Scoring rubric:
+        - Executability: 0-4 points
+        - Logical ordering: 0-3 points
+        - Realism: 0-3 points
+        """
+        score = 0
+
+        # ✅ Executability (0-4 points)
+        is_valid, errors = self.validate_plan(plan)
+        if is_valid:
+            score += 4
+        else:
+            score += max(0, 2 - len(errors))  # Penalize errors
+
+        # ✅ Logical ordering (0-3 points)
+        is_logical = self.check_step_ordering(plan)
+        if is_logical:
+            score += 3
+
+        # ✅ Realism (0-3 points)
+        is_realistic = self.check_parameter_realism(plan)
+        if is_realistic:
+            score += 3
+
+        return max(1, min(10, score))  # Clamp to [1, 10]
+
+    def check_step_ordering(self, plan: dict) -> bool:
+        """Check if steps are in logical sequence."""
+        steps = plan['steps']
+
+        for i, step in enumerate(steps):
+            # Manipulate should follow perceive
+            if step['action_type'] == 'manipulate':
+                if not any(s['action_type'] == 'perceive' for s in steps[:i]):
+                    return False
+
+        return True
+```
+
+### 6.3 Measuring Plan Validity Rate
+
+Track how many plans are valid across diverse goals:
+
+```python
+def measure_validity_rate(goals: list[str]) -> float:
+    """
+    Generate plans for diverse goals and measure validity rate.
+
+    Goal: 95%+ valid plans
+    """
+    planner = LLMPlanner()
+    valid_count = 0
+
+    for goal in goals:
+        plan = planner.generate_plan(goal)
+        is_valid, _ = PlanValidator().validate_plan(plan)
+        if is_valid:
+            valid_count += 1
+
+    validity_rate = valid_count / len(goals)
+    return validity_rate
+```
+
+---
+
+## Code Examples
+
+### Example 4: Basic LLM Planning
+
+```python
+"""
+🚀 Module 4 Example 4: Basic LLM Task Decomposition
+Demonstrates simple goal decomposition using GPT-4 function calling.
+Generates structured task plan from natural language goal.
+"""
+
+import os
+import json
+from openai import OpenAI
+from dotenv import load_dotenv
+
+def basic_llm_planning(goal: str) -> dict:
+    """
+    Generate task plan from natural language goal.
+
+    Args:
+        goal: High-level goal description
+
+    Returns:
+        Task plan with steps: [{'action_type': ..., 'parameters': {...}}, ...]
+    """
+    load_dotenv()
+    api_key = os.getenv("OPENAI_API_KEY")
+    client = OpenAI(api_key=api_key)
+
+    # ✅ Define robot capabilities
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "navigate",
+                "description": "Move robot to location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "destination": {
+                            "type": "string",
+                            "enum": ["kitchen", "bedroom", "living_room", "user_location"],
+                            "description": "Target location"
+                        },
+                        "speed": {
+                            "type": "string",
+                            "enum": ["slow", "normal", "fast"],
+                            "default": "normal"
+                        }
+                    },
+                    "required": ["destination"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "perceive",
+                "description": "Detect objects in environment",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "target_object": {
+                            "type": "string",
+                            "description": "Object to find (e.g., 'red cube')"
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "Where to look (e.g., 'on table')"
+                        }
+                    },
+                    "required": ["target_object"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "manipulate",
+                "description": "Grasp and move objects",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["grasp", "release", "lift"],
+                            "description": "Manipulation action"
+                        },
+                        "object_id": {
+                            "type": "string",
+                            "description": "Object identifier"
+                        },
+                        "target_location": {
+                            "type": "string",
+                            "description": "Where to place object"
+                        }
+                    },
+                    "required": ["action", "object_id"]
+                }
+            }
+        }
+    ]
+
+    # ✅ System prompt
+    system_prompt = """
+You are a task planning assistant for a humanoid robot.
+Decompose natural language goals into executable steps.
+Always return a valid JSON array of function calls.
+"""
+
+    # ✅ Call GPT-4 with function calling
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Goal: {goal}"}
+    ]
+
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=messages,
+        tools=tools,
+        tool_choice="required",
+        temperature=0.3  # Low temperature for consistent decomposition
+    )
+
+    # ✅ Extract function calls from response
+    plan_steps = []
+
+    for tool_call in response.message.tool_calls:
+        step = {
+            "action_type": tool_call.function.name,
+            "parameters": json.loads(tool_call.function.arguments)
+        }
+        plan_steps.append(step)
+
+    plan = {
+        "goal": goal,
+        "steps": plan_steps,
+        "estimated_duration_seconds": len(plan_steps) * 3.0  # Rough estimate
+    }
+
+    return plan
+
+
+if __name__ == "__main__":
+    # ✅ Example usage
+    goal = "Pick up the red cube from the kitchen"
+
+    plan = basic_llm_planning(goal)
+
+    print(f"📋 Task Plan for Goal: '{goal}'")
+    print(f"   Estimated Duration: {plan['estimated_duration_seconds']:.1f} seconds")
+    print(f"\n   Steps:")
+    for i, step in enumerate(plan['steps'], 1):
+        print(f"   {i}. {step['action_type']}")
+        for param, value in step['parameters'].items():
+            print(f"      - {param}: {value}")
+```
+
+**Expected Output**:
+```
+📋 Task Plan for Goal: 'Pick up the red cube from the kitchen'
+   Estimated Duration: 9.0 seconds
+
+   Steps:
+   1. navigate
+      - destination: kitchen
+   2. perceive
+      - target_object: red cube
+      - location: on table
+   3. manipulate
+      - action: grasp
+      - object_id: obj_red_cube
+```
+
+### Example 5: Complex Multi-Step Planning
+
+```python
+"""
+🚀 Module 4 Example 5: Complex Multi-Step Task Decomposition
+Demonstrates decomposition of complex, multi-step goals.
+Includes validation and quality scoring.
+"""
+
+import json
+import time
+from llm_client import LLMPlannerClient
+from plan_validator import PlanValidator
+from data_models import TaskPlan
+
+def complex_task_planning(goal: str) -> dict:
+    """
+    Generate and validate complex task plan.
+
+    Returns:
+        {
+            'goal': str,
+            'plan': TaskPlan,
+            'is_valid': bool,
+            'quality_score': int,
+            'generation_latency': float,
+            'issues': list
+        }
+    """
+    planner = LLMPlannerClient()
+    validator = PlanValidator()
+
+    # ✅ Generate plan
+    start_time = time.time()
+    plan = planner.generate_plan(goal)
+    generation_latency = time.time() - start_time
+
+    # ✅ Validate plan
+    is_valid, errors = validator.validate_plan(plan)
+
+    # ✅ Score quality
+    quality_score = validator.score_plan(plan) if is_valid else 1
+
+    # ✅ Compile results
+    result = {
+        'goal': goal,
+        'plan': plan,
+        'is_valid': is_valid,
+        'quality_score': quality_score,
+        'generation_latency': generation_latency,
+        'issues': errors
+    }
+
+    return result
+
+
+def evaluate_goal_diversity(goals: list[str]) -> dict:
+    """
+    Evaluate planner across diverse goals.
+    Tests simple, complex, ambiguous, and impossible goals.
+    """
+    results = {
+        'simple': [],
+        'complex': [],
+        'ambiguous': [],
+        'impossible': [],
+        'summary': {}
+    }
+
+    # ✅ Simple goals
+    simple_goals = [
+        "Move forward",
+        "Stop",
+        "Turn around"
+    ]
+    for goal in simple_goals:
+        result = complex_task_planning(goal)
+        results['simple'].append(result)
+
+    # ✅ Complex goals
+    complex_goals = [
+        "Bring me the red cube from the kitchen table to the living room",
+        "Find the blue bottle on the shelf, avoid the cat, and place it on the counter"
+    ]
+    for goal in complex_goals:
+        result = complex_task_planning(goal)
+        results['complex'].append(result)
+
+    # ✅ Ambiguous goals
+    ambiguous_goals = [
+        "Pick up the thing",
+        "Move it somewhere",
+        "Help with the task"
+    ]
+    for goal in ambiguous_goals:
+        result = complex_task_planning(goal)
+        results['ambiguous'].append(result)
+
+    # ✅ Impossible goals
+    impossible_goals = [
+        "Fly to the moon",
+        "Phase through walls"
+    ]
+    for goal in impossible_goals:
+        result = complex_task_planning(goal)
+        results['impossible'].append(result)
+
+    # ✅ Compute summary statistics
+    all_results = (
+        results['simple'] + results['complex'] +
+        results['ambiguous'] + results['impossible']
+    )
+    valid_count = sum(1 for r in all_results if r['is_valid'])
+
+    results['summary'] = {
+        'total_goals': len(all_results),
+        'valid_plans': valid_count,
+        'validity_rate': valid_count / len(all_results),
+        'avg_quality_score': sum(r['quality_score'] for r in all_results if r['is_valid']) / max(1, valid_count),
+        'avg_latency': sum(r['generation_latency'] for r in all_results) / len(all_results)
+    }
+
+    return results
+
+
+if __name__ == "__main__":
+    # ✅ Test complex planning
+    goal = "Bring me the red cube from the kitchen table to the living room"
+    result = complex_task_planning(goal)
+
+    print(f"Goal: '{goal}'")
+    print(f"Valid: {result['is_valid']}")
+    print(f"Quality Score: {result['quality_score']}/10")
+    print(f"Generation Latency: {result['generation_latency']:.2f}s")
+    if result['issues']:
+        print(f"Issues: {result['issues']}")
+
+    print("\n" + "="*60)
+    print("Evaluating diverse goals...")
+    evaluation = evaluate_goal_diversity([])  # Use synthetic goals
+
+    print(f"Validity Rate: {evaluation['summary']['validity_rate']:.1%}")
+    print(f"Average Latency: {evaluation['summary']['avg_latency']:.2f}s")
+```
+
+### Example 6: Ambiguity Handling & Error Cases
+
+```python
+"""
+🚀 Module 4 Example 6: Ambiguity Detection and Clarification
+Demonstrates handling of ambiguous goals and error recovery.
+"""
+
+import re
+from llm_client import LLMPlannerClient
+from openai import OpenAI
+from dotenv import load_dotenv
+import os
+
+class AmbiguityHandler:
+    """Handle ambiguous goals with clarification requests."""
+
+    def __init__(self):
+        load_dotenv()
+        self.llm_client = LLMPlannerClient()
+        self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    def detect_ambiguity(self, goal: str) -> tuple[bool, list]:
+        """
+        ✅ Detect ambiguity patterns in goal.
+
+        Returns:
+            (is_ambiguous, issues)
+        """
+        issues = []
+
+        # Check for vague object references
+        if re.search(r'\b(thing|stuff|object|item|it|them)\b', goal, re.IGNORECASE):
+            issues.append("Vague object reference")
+
+        # Check for unspecified locations
+        if re.search(r'\b(somewhere|anywhere|here|there)\b', goal, re.IGNORECASE):
+            issues.append("Location unspecified")
+
+        # Check for unclear actions
+        if re.search(r'\b(help|task|do something|assist)\b', goal, re.IGNORECASE):
+            issues.append("Action unclear")
+
+        return len(issues) > 0, issues
+
+    def request_clarification(self, goal: str, issues: list) -> str:
+        """
+        🤔 Ask user for clarification on ambiguous goal.
+
+        Returns:
+            Clarified goal statement
+        """
+        print(f"❓ Your goal '{goal}' is ambiguous.")
+        print(f"   Issues: {', '.join(issues)}")
+
+        # Generate clarification questions via LLM
+        prompt = f"""
+The user said: '{goal}'
+The issues with this are: {issues}
+
+Generate 3 clarifying questions to help the user be more specific.
+Return as a numbered list.
+"""
+
+        response = self.openai.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3
+        )
+
+        print(f"\n   Please clarify:")
+        print(response.choices[0].message.content)
+
+        # Simulate user input (in real system, prompt user)
+        clarified_goal = input("\n   Clarified goal: ").strip()
+        return clarified_goal
+
+    def handle_impossible_goal(self, goal: str) -> dict:
+        """
+        ❌ Detect and handle impossible goals.
+
+        Returns:
+            {'status': 'impossible', 'reason': str, 'alternatives': list}
+        """
+        impossible_patterns = [
+            (r'\b(fly|float|levitate)\b', "Robot cannot fly"),
+            (r'\b(phase through|teleport|disappear)\b', "Robot cannot phase through objects"),
+            (r'\b(destroy|break|smash)\b', "Robot should not destroy objects"),
+            (r'\b(moon|space|universe)\b', "Destination is out of reach")
+        ]
+
+        for pattern, reason in impossible_patterns:
+            if re.search(pattern, goal, re.IGNORECASE):
+                return {
+                    'status': 'impossible',
+                    'reason': reason,
+                    'goal': goal,
+                    'suggestion': "Please rephrase using achievable robot capabilities: navigate, perceive, manipulate, request_clarification"
+                }
+
+        return {'status': 'possible'}
+
+    def process_goal_with_error_handling(self, goal: str) -> dict:
+        """
+        ✅ Full goal processing with error handling.
+
+        Returns:
+            {
+                'status': 'success' | 'clarification_needed' | 'impossible',
+                'goal': str,
+                'plan': TaskPlan or None,
+                'action': str
+            }
+        """
+        # ✅ Check for impossible goals
+        impossible_check = self.handle_impossible_goal(goal)
+        if impossible_check['status'] == 'impossible':
+            return {
+                'status': 'impossible',
+                'goal': goal,
+                'reason': impossible_check['reason'],
+                'suggestion': impossible_check.get('suggestion')
+            }
+
+        # ✅ Check for ambiguous goals
+        is_ambiguous, issues = self.detect_ambiguity(goal)
+        if is_ambiguous:
+            clarified_goal = self.request_clarification(goal, issues)
+            return {
+                'status': 'clarification_needed',
+                'original_goal': goal,
+                'clarified_goal': clarified_goal,
+                'action': 'resubmit with clarified goal'
+            }
+
+        # ✅ Generate plan
+        plan = self.llm_client.generate_plan(goal)
+
+        return {
+            'status': 'success',
+            'goal': goal,
+            'plan': plan
+        }
+
+
+if __name__ == "__main__":
+    handler = AmbiguityHandler()
+
+    # ✅ Test cases
+    test_goals = [
+        "Pick up the red cube",                        # Clear
+        "Pick up the thing",                          # Ambiguous
+        "Bring me the blue object somewhere",         # Ambiguous
+        "Fly to the kitchen",                         # Impossible
+        "Help with the task"                          # Ambiguous
+    ]
+
+    for goal in test_goals:
+        print(f"\n📝 Processing goal: '{goal}'")
+        result = handler.process_goal_with_error_handling(goal)
+        print(f"   Status: {result['status']}")
+```
+
+---
+
+## Exercises
+
+### Exercise 3: Evaluate Plan Quality Across Diverse Goals
+
+**Objective**: Assess plan quality across 10 varied goals.
+
+**Task**:
+1. Generate plans for 10 diverse goals (simple, complex, ambiguous)
+2. Score each plan using quality metrics (executability, logical ordering, realism)
+3. Document plan quality scores (1-10 scale)
+4. Identify failure cases and analyze reasons
+5. Calculate overall validity rate and average quality
+
+**Acceptance Criteria**:
+- [ ] All 10 goals have generated plans
+- [ ] Each plan scored on 1-10 scale
+- [ ] Validity rate ≥ 95% (at least 9.5/10 valid)
+- [ ] CSV file with columns: goal, num_steps, is_valid, quality_score, issues
+- [ ] Summary report with statistics
+
+**Starter Code Template**:
+```python
+def exercise_03_plan_quality_evaluation():
+    """
+    Evaluate plan quality across diverse goals.
+    """
+
+    goals = [
+        # Simple
+        "Move forward",
+        "Stop",
+        # Complex
+        "Bring me the red cube from the kitchen",
+        "Navigate to the bedroom avoiding obstacles",
+        # Ambiguous
+        "Pick up the thing",
+        "Help with the task",
+        # Diverse
+        "Fetch the blue bottle and place it on the shelf",
+        "Identify all red objects in the living room",
+        # Edge cases
+        "Do something useful",
+        "Navigate without moving"
+    ]
+
+    # TODO: Generate plans for each goal
+    # TODO: Score each plan
+    # TODO: Save results to CSV
+    # TODO: Print summary statistics
+
+    pass
+
+if __name__ == "__main__":
+    exercise_03_plan_quality_evaluation()
+```
+
+### Exercise 4: Implement ROS 2 Action Client for Planning Service
+
+**Objective**: Build a ROS 2 action client that requests task plans.
+
+**Task**:
+1. Create ROS 2 action client that sends goals to `PlanGoalAction` server
+2. Send 3 diverse goal requests (simple, complex, ambiguous)
+3. Receive and log returned plans with timestamps
+4. Measure latency for each plan generation (&lt;5 seconds target)
+5. Implement error handling for timeouts/failures
+
+**Acceptance Criteria**:
+- [ ] Client sends goals without errors
+- [ ] Plans logged with timestamps
+- [ ] All 3 goals produce plans
+- [ ] Latency &lt;5 seconds per plan
+- [ ] Error cases handled gracefully
+- [ ] Client stops cleanly with Ctrl+C
+
+**Starter Code Template**:
+```python
+import rclpy
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from custom_msgs.action import PlanGoal
+import time
+
+class PlanningClientNode(Node):
+    """ROS 2 action client for task planning."""
+
+    def __init__(self):
+        super().__init__('planning_client_node')
+        # TODO: Create action client for PlanGoal
+
+    def send_goal(self, goal_description: str):
+        """Send planning goal and wait for result."""
+        # TODO: Implement goal sending
+        # TODO: Measure latency
+        # TODO: Log result
+        pass
+
+def main():
+    rclpy.init()
+    node = PlanningClientNode()
+
+    # TODO: Send 3 goals
+    # TODO: Log results
+    # TODO: Print latency stats
+
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+---
+
+## Assessment Rubric
+
+Evaluate student submissions using this rubric:
+
+| Criterion | Excellent (40%) | Good (30%) | Fair (20%) | Poor (0%) |
+|-----------|-----------------|-----------|-----------|-----------|
+| **Plan Quality** | Plans are logical, valid, realistic; high quality scores | Most plans valid; some parameter issues | Some valid plans; quality varies | Plans frequently invalid |
+| **Code Quality** | Clean, documented, good error handling | Good structure; minor issues | Basic structure; limited documentation | Poor code quality |
+| **Analysis** | Deep understanding shown; failure modes identified | Good analysis; most cases covered | Basic analysis provided | Minimal analysis |
+| **Validation** | Comprehensive validation logic; all cases handled | Handles main cases; some gaps | Basic validation | No validation logic |
+| **Performance** | Latency &lt;5s; 95%+ validity rate | Latency 5-10s; 85-95% validity | Latency &gt;10s; &lt;85% validity | Not measured |
+
+**Total Score**: Sum of all criteria (200 points max)
+
+---
+
+## References
+
+1. Brown, T. B., Mann, B., Ryder, N., Subbiah, M., Kaplan, J., Dhariwal, P., ... & Amodei, D. (2020). "Language Models are Few-Shot Learners." *Advances in Neural Information Processing Systems (NeurIPS)*, 33, 1877–1901. Available: https://arxiv.org/abs/2005.14165 [Accessed: January 26, 2026]
+
+2. OpenAI. "Function Calling in GPT-4." OpenAI Platform Documentation. Available: https://platform.openai.com/docs/guides/function-calling [Accessed: January 26, 2026]
+
+3. Schaal, S. (1999). "Is Imitation Learning the Route to Humanoid Robots?" *Trends in Cognitive Sciences*, 3(6), 233–242. DOI: 10.1016/S1364-6613(99)01327-3
+
+4. Levine, S., Kumar, A., Tucker, G., & Fu, J. (2020). "Offline Reinforcement Learning: Tutorial, Review, and Perspectives on Open Problems." *arXiv preprint arXiv:2005.01643*. Available: https://arxiv.org/abs/2005.01643 [Accessed: January 26, 2026]
+
+5. ROS 2 Humble. "Actions." Concepts Documentation. Available: https://docs.ros.org/en/humble/Concepts/Intermediate/About-Actions.html [Accessed: January 26, 2026]
+
+6. OpenAI. "GPT-4 Technical Report." arXiv preprint arXiv:2303.08774. Available: https://arxiv.org/abs/2303.08774 [Accessed: January 26, 2026]
+
+7. Mnih, V., Kavukcuoglu, K., & Silver, D. (2013). "Action-Dependent Recurrent Networks for Visual Object Tracking." In *International Conference on Machine Learning* (ICML). Available: https://arxiv.org/abs/1304.6404 [Accessed: January 26, 2026]
+
+8. Prabhakar, R., & Shanahan, M. (2023). "Reasoning with Language Models: Thoughts, Uncertainties, and Limitations." arXiv preprint arXiv:2302.11589. Available: https://arxiv.org/abs/2302.11589 [Accessed: January 26, 2026]
+
+---
+
+**Module**: Module 4 - Vision-Language-Action Capstone
+**Version**: 1.0
+**Last Updated**: January 26, 2026
+**Next Chapter**: Chapter 12 - Capstone - Autonomous Humanoid

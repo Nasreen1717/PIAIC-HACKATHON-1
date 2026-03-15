@@ -1,0 +1,304 @@
+# Contract: LLM-Based Task Decomposition
+# Chapter 11: Cognitive Planning with LLMs
+# Defines the API for goal-to-plan conversion via GPT-4
+
+service:
+  name: LLMTaskPlannerService
+  description: "Accepts high-level goals and returns decomposed task plans"
+
+  # Input contract
+  request:
+    - field: goal
+      type: string
+      description: "High-level user goal (natural language)"
+      example: "bring me the red cube from the kitchen table"
+      constraints: "1-500 characters"
+
+    - field: robot_context
+      type: dict
+      description: "Robot capabilities and current state"
+      fields:
+        - capabilities: ["navigate", "perceive", "manipulate"]
+        - current_location: "home_base"
+        - objects_known: ["red_cube", "kitchen_table", "blue_sphere"]
+      constraints: "JSON, max 1KB"
+
+    - field: timeout_seconds
+      type: int
+      description: "Max time to wait for plan generation"
+      default: 5
+      constraints: "1-30 seconds"
+
+  # Output contract
+  response:
+    - field: plan_id
+      type: string
+      description: "Unique identifier for this plan"
+
+    - field: steps
+      type: array[object]
+      description: "Ordered action steps"
+      item_schema:
+        - step_index: int (1-indexed)
+        - action_type: string ("navigate" | "perceive" | "manipulate" | "request_clarification")
+        - parameters: dict (action-specific params)
+        - expected_outcome: string
+        - timeout_seconds: int (default 30)
+
+    - field: metadata
+      type: dict
+      description: "LLM reasoning and confidence"
+      fields:
+        - llm_model: "gpt-4"
+        - confidence: "high" | "medium" | "low"
+        - reasoning: string (brief explanation)
+        - alternatives_considered: array[string]
+
+    - field: estimated_duration_seconds
+      type: float
+      description: "Predicted execution time"
+
+    - field: error
+      type: string | null
+      description: "Error message if planning failed"
+
+  # Error handling
+  errors:
+    - code: "AMBIGUOUS_GOAL"
+      description: "Goal too vague; LLM requests clarification"
+      response: "request_clarification step included in plan"
+      http_status: 200
+
+    - code: "UNSUPPORTED_GOAL"
+      description: "Goal beyond robot capabilities"
+      response: "error message explaining limitations"
+      http_status: 400
+
+    - code: "API_TIMEOUT"
+      description: "LLM didn't respond in time"
+      http_status: 504
+
+    - code: "API_ERROR"
+      description: "OpenAI API error"
+      http_status: 500
+
+---
+
+ros2_action:
+  name: PlanGoal
+  type: custom_msgs/PlanGoalAction
+  description: "Action server for task plan generation"
+
+  # Action goal
+  goal:
+    - field: goal
+      type: string
+      description: "High-level goal"
+
+    - field: robot_context_json
+      type: string
+      description: "Robot state as JSON"
+
+  # Action result
+  result:
+    - field: plan_id
+      type: string
+
+    - field: plan_json
+      type: string
+      description: "TaskPlan serialized as JSON"
+
+    - field: success
+      type: bool
+
+  # Action feedback (streamed)
+  feedback:
+    - field: status
+      type: string
+      description: "Planning progress ('starting', 'calling_llm', 'parsing', 'done')"
+
+    - field: elapsed_seconds
+      type: float
+
+---
+
+# Chapter 11 Example Contracts
+
+examples:
+  - example_id: "example_01_basic_planning"
+    title: "Basic Goal Decomposition via GPT-4"
+    inputs:
+      goal: "pick up the red object"
+      robot_context:
+        capabilities: ["navigate", "perceive", "manipulate"]
+        current_location: "table_area"
+        objects_known: ["red_object"]
+    expected_output:
+      steps:
+        - step: 1, action: "perceive", goal: "locate red object"
+        - step: 2, action: "manipulate", goal: "grasp red object"
+    latency_target: "<3 seconds"
+
+  - example_id: "example_02_complex_planning"
+    title: "Multi-Step Task Decomposition"
+    inputs:
+      goal: "bring me the red cube from the kitchen table"
+      robot_context:
+        capabilities: ["navigate", "perceive", "manipulate"]
+        current_location: "living_room"
+        objects_known: ["red_cube", "kitchen_table"]
+    expected_output:
+      steps:
+        - step: 1, action: "navigate", target: "kitchen_table"
+        - step: 2, action: "perceive", goal: "detect red_cube"
+        - step: 3, action: "manipulate", goal: "grasp red_cube"
+        - step: 4, action: "navigate", target: "user_location"
+    latency_target: "<5 seconds"
+
+  - example_id: "example_03_ambiguous_goal"
+    title: "Handling Ambiguous Goals"
+    inputs:
+      goal: "clean the room" # ambiguous for robot
+      robot_context:
+        capabilities: ["navigate", "perceive", "manipulate"]
+    expected_output:
+      steps:
+        - step: 1, action: "request_clarification"
+          parameters:
+            question: "What does 'clean' mean? (sweep, mop, tidy)"
+            options: ["sweep", "mop", "tidy"]
+    latency_target: "<3 seconds"
+
+  - example_id: "example_04_error_handling"
+    title: "Detecting Unsupported Goals"
+    inputs:
+      goal: "fly to the moon"
+      robot_context:
+        capabilities: ["navigate", "perceive", "manipulate"]
+    expected_output:
+      error: "UNSUPPORTED_GOAL"
+      message: "Robot cannot fly. Supported actions: navigate, perceive, manipulate."
+    latency_target: "<3 seconds"
+
+---
+
+# Chapter 11 Exercise Contracts
+
+exercises:
+  - exercise_id: "exercise_01_plan_quality"
+    title: "Evaluate Plan Quality for Diverse Goals"
+    instructions: |
+      Test the LLM planner with 10 different goals:
+      - Simple (1-2 steps): "move forward"
+      - Complex (3-5 steps): "fetch object X and bring to user"
+      - Ambiguous: "help me with the task"
+      - Unsupported: "fly away"
+
+      For each goal, evaluate:
+      1. Does the plan make sense?
+      2. Are steps in logical order?
+      3. Are parameters correct?
+      4. Is estimated duration reasonable?
+    acceptance_criteria:
+      - "All plans are internally consistent"
+      - "Simple goals have 1-2 steps"
+      - "Complex goals decompose correctly"
+      - "Ambiguous/unsupported goals handled gracefully"
+    expected_time: "1 hour"
+
+  - exercise_id: "exercise_02_ros2_action"
+    title: "Implement ROS 2 Action Client"
+    instructions: |
+      Create a ROS 2 action client that:
+      1. Sends a goal to the PlanGoal action
+      2. Waits for result (with timeout)
+      3. Logs the returned plan
+      4. Handles errors
+
+      Test with 3 different goals.
+    acceptance_criteria:
+      - "Action client runs without errors"
+      - "Plans are correctly received and logged"
+      - "Timeout/error handling works"
+    expected_time: "1.5 hours"
+
+---
+
+# LLM Prompt Template (System Prompt)
+
+llm_system_prompt: |
+  You are a task planning assistant for a humanoid robot in a simulation environment.
+  Your job is to decompose natural language goals into executable steps.
+
+  Robot capabilities:
+  - navigate(target_location): Move to a named location (e.g., "kitchen_table")
+  - perceive(object_class, color): Search for an object by class and color
+  - manipulate(action, object_id): Perform actions like grasp, release, push
+
+  Known objects and locations: [will be filled from robot_context]
+
+  For each goal:
+  1. Break it into 1-20 ordered steps
+  2. Each step must use one of the three capabilities
+  3. If the goal is ambiguous, suggest a request_clarification step
+  4. Estimate total execution time
+
+  Respond in JSON format:
+  {
+    "steps": [
+      {"step_index": 1, "action_type": "navigate", "parameters": {...}, "expected_outcome": "..."},
+      ...
+    ],
+    "metadata": {
+      "confidence": "high|medium|low",
+      "reasoning": "...",
+      "alternatives_considered": ["..."]
+    },
+    "estimated_duration_seconds": 25
+  }
+
+---
+
+# GPT-4 Function Calling Schema (JSON)
+
+function_schema:
+  name: decompose_goal_to_plan
+  description: "Convert a natural language goal into a structured task plan"
+  parameters:
+    type: object
+    properties:
+      goal:
+        type: string
+        description: "High-level user goal"
+      steps:
+        type: array
+        items:
+          type: object
+          properties:
+            step_index:
+              type: integer
+            action_type:
+              type: string
+              enum: ["navigate", "perceive", "manipulate", "request_clarification"]
+            parameters:
+              type: object
+            expected_outcome:
+              type: string
+            timeout_seconds:
+              type: integer
+        description: "Ordered steps"
+      metadata:
+        type: object
+        properties:
+          confidence:
+            type: string
+            enum: ["high", "medium", "low"]
+          reasoning:
+            type: string
+          alternatives_considered:
+            type: array
+            items:
+              type: string
+      estimated_duration_seconds:
+        type: number
+    required: ["goal", "steps", "metadata", "estimated_duration_seconds"]

@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Exercise Format Schema",
+  "description": "Schema defining the format for hands-on exercises in Module 1",
+  "type": "object",
+  "required": [
+    "exercise_id",
+    "title",
+    "chapter",
+    "difficulty_level",
+    "problem_statement",
+    "learning_objectives",
+    "acceptance_criteria",
+    "estimated_time_minutes"
+  ],
+  "properties": {
+    "exercise_id": {
+      "type": "string",
+      "description": "Unique exercise identifier",
+      "pattern": "^[0-9]-[0-9]-[a-z-]+$"
+    },
+    "title": {
+      "type": "string",
+      "description": "Exercise title",
+      "minLength": 5,
+      "maxLength": 100
+    },
+    "chapter": {
+      "type": "integer",
+      "description": "Associated chapter number",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "difficulty_level": {
+      "type": "string",
+      "description": "Difficulty level",
+      "enum": ["beginner", "intermediate", "advanced"]
+    },
+    "problem_statement": {
+      "type": "string",
+      "description": "Clear, concise problem for student to solve",
+      "minLength": 50,
+      "maxLength": 1000
+    },
+    "learning_objectives": {
+      "type": "array",
+      "description": "What student learns from this exercise",
+      "minItems": 2,
+      "maxItems": 5,
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 200
+      }
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "description": "Testable criteria for success",
+      "minItems": 2,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["criterion", "measurement"],
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "description": "What must be true"
+          },
+          "measurement": {
+            "type": "string",
+            "description": "How to measure it"
+          },
+          "automated_test": {
+            "type": "boolean",
+            "description": "Can this be automated?"
+          }
+        }
+      }
+    },
+    "estimated_time_minutes": {
+      "type": "integer",
+      "description": "Estimated completion time in minutes",
+      "minimum": 15,
+      "maximum": 120
+    },
+    "directory": {
+      "type": "string",
+      "description": "Directory path for exercise",
+      "pattern": "^exercises/[0-9]-[0-9]-[a-z-]+/$"
+    },
+    "template_files": {
+      "type": "array",
+      "description": "Template or starter files provided",
+      "items": {
+        "type": "string"
+      }
+    },
+    "solution_file": {
+      "type": "string",
+      "description": "Reference solution filename",
+      "pattern": "^solution\\.(py|urdf)$"
+    },
+    "test_file": {
+      "type": "string",
+      "description": "Automated test file",
+      "pattern": "^test_solution\\.py$"
+    },
+    "prerequisites": {
+      "type": "array",
+      "description": "Prerequisite concepts or exercises",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hints": {
+      "type": "array",
+      "description": "Hints for student if stuck",
+      "items": {
+        "type": "string"
+      }
+    },
+    "common_mistakes": {
+      "type": "array",
+      "description": "Common mistakes students make",
+      "items": {
+        "type": "object",
+        "properties": {
+          "mistake": {
+            "type": "string"
+          },
+          "correction": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "extension_challenges": {
+      "type": "array",
+      "description": "Advanced extensions if student finishes early",
+      "items": {
+        "type": "string"
+      }
+    },
+    "grading_rubric": {
+      "type": "object",
+      "description": "Rubric for manual grading",
+      "properties": {
+        "functionality": {
+          "type": "object",
+          "properties": {
+            "weight": {
+              "type": "integer"
+            },
+            "description": {
+              "type": "string"
+            }
+          }
+        },
+        "correctness": {
+          "type": "object",
+          "properties": {
+            "weight": {
+              "type": "integer"
+            },
+            "description": {
+              "type": "string"
+            }
+          }
+        },
+        "code_quality": {
+          "type": "object",
+          "properties": {
+            "weight": {
+              "type": "integer"
+            },
+            "description": {
+              "type": "string"
+            }
+          }
+        },
+        "documentation": {
+          "type": "object",
+          "properties": {
+            "weight": {
+              "type": "integer"
+            },
+            "description": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "exercise_id": "1-1-create-publisher",
+      "title": "Create a Publisher Node",
+      "chapter": 1,
+      "difficulty_level": "beginner",
+      "problem_statement": "Create a ROS 2 publisher node that publishes an integer counter to the 'counter_topic' topic, incrementing every second",
+      "learning_objectives": [
+        "Create a ROS 2 node using rclpy",
+        "Understand publishers and message types",
+        "Implement a timer-based publishing pattern"
+      ],
+      "acceptance_criteria": [
+        {
+          "criterion": "Node publishes to correct topic",
+          "measurement": "ros2 topic echo shows messages",
+          "automated_test": true
+        },
+        {
+          "criterion": "Messages have correct type (Int32)",
+          "measurement": "ros2 topic info shows std_msgs.msg.Int32",
+          "automated_test": true
+        },
+        {
+          "criterion": "Publishing frequency is 1 Hz",
+          "measurement": "One message per second",
+          "automated_test": true
+        }
+      ],
+      "estimated_time_minutes": 25,
+      "directory": "exercises/1-1-create-publisher/",
+      "solution_file": "solution.py",
+      "test_file": "test_solution.py",
+      "prerequisites": ["Chapter 1: Architecture basics"],
+      "hints": [
+        "Use node.create_publisher() to create a publisher",
+        "Use node.create_timer() for periodic publishing",
+        "Import std_msgs.msg.Int32 for message type"
+      ],
+      "grading_rubric": {
+        "functionality": {
+          "weight": 40,
+          "description": "Code runs without errors and publishes correctly"
+        },
+        "correctness": {
+          "weight": 40,
+          "description": "Publisher publishes correct data at correct frequency"
+        },
+        "code_quality": {
+          "weight": 10,
+          "description": "Code follows PEP 8 and includes docstrings"
+        },
+        "documentation": {
+          "weight": 10,
+          "description": "Code has clear comments explaining logic"
+        }
+      }
+    }
+  ]
+}

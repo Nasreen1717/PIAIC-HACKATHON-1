@@ -1,0 +1,207 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Code Example Format Schema",
+  "description": "Schema defining the format and metadata for code examples in Module 1",
+  "type": "object",
+  "required": [
+    "example_id",
+    "title",
+    "chapter",
+    "concept",
+    "language",
+    "filename",
+    "tested_version",
+    "learning_objectives"
+  ],
+  "properties": {
+    "example_id": {
+      "type": "string",
+      "description": "Unique identifier for example",
+      "pattern": "^[0-9]+-[a-z-]+$"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable title",
+      "minLength": 5,
+      "maxLength": 100
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of what example demonstrates",
+      "minLength": 20,
+      "maxLength": 500
+    },
+    "chapter": {
+      "type": "integer",
+      "description": "Chapter number containing this example",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "concept": {
+      "type": "string",
+      "description": "Main concept demonstrated",
+      "enum": [
+        "publisher",
+        "subscriber",
+        "topic-introspection",
+        "service-server",
+        "service-client",
+        "custom-message",
+        "action-server",
+        "action-client",
+        "joint-controller",
+        "simple-humanoid",
+        "extended-humanoid",
+        "urdf-visualization"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "description": "Programming language",
+      "enum": ["python", "shell", "xml", "urdf", "msg"]
+    },
+    "filename": {
+      "type": "string",
+      "description": "Filename in examples/ directory",
+      "pattern": "^[0-9]+-[a-z-]+\\.(py|sh|msg|urdf|xml)$"
+    },
+    "tested_on": {
+      "type": "object",
+      "description": "Tested environment specifications",
+      "required": ["os", "os_version", "ros2_version", "python_version"],
+      "properties": {
+        "os": {
+          "type": "string",
+          "enum": ["Ubuntu", "Linux"]
+        },
+        "os_version": {
+          "type": "string",
+          "enum": ["22.04"]
+        },
+        "ros2_version": {
+          "type": "string",
+          "enum": ["Humble"]
+        },
+        "python_version": {
+          "type": "string",
+          "enum": ["3.10", "3.11", "3.12"]
+        }
+      }
+    },
+    "tested_version": {
+      "type": "string",
+      "description": "Version this example was tested against",
+      "pattern": "^[0-9]+(\\.[0-9]+)*$"
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "External packages required",
+      "items": {
+        "type": "string"
+      }
+    },
+    "learning_objectives": {
+      "type": "array",
+      "description": "What students learn from this example",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 200
+      }
+    },
+    "estimated_time_minutes": {
+      "type": "integer",
+      "description": "Estimated time to understand and run example",
+      "minimum": 5,
+      "maximum": 60
+    },
+    "difficulty_level": {
+      "type": "string",
+      "description": "Difficulty level",
+      "enum": ["beginner", "intermediate", "advanced"]
+    },
+    "has_test": {
+      "type": "boolean",
+      "description": "Whether automated test exists for this example"
+    },
+    "test_file": {
+      "type": "string",
+      "description": "Path to test file if exists",
+      "pattern": "^tests/.*\\.py$"
+    },
+    "citations": {
+      "type": "array",
+      "description": "References or citations for code",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "accessed_date": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "description": "Important notes or caveats",
+      "items": {
+        "type": "string"
+      }
+    },
+    "performance_target": {
+      "type": "object",
+      "description": "Performance expectations",
+      "properties": {
+        "startup_time_seconds": {
+          "type": "number"
+        },
+        "execution_time_seconds": {
+          "type": "number"
+        },
+        "memory_usage_mb": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "example_id": "1-hello-world-pub",
+      "title": "Hello World Publisher",
+      "description": "Simple ROS 2 publisher that publishes 'Hello World' messages to a topic",
+      "chapter": 1,
+      "concept": "publisher",
+      "language": "python",
+      "filename": "1-hello-world-pub.py",
+      "tested_version": "2.0.0",
+      "tested_on": {
+        "os": "Ubuntu",
+        "os_version": "22.04",
+        "ros2_version": "Humble",
+        "python_version": "3.10"
+      },
+      "dependencies": ["rclpy"],
+      "learning_objectives": [
+        "Create a ROS 2 node in Python",
+        "Understand publisher creation and message publishing",
+        "Manage node lifecycle (spin, shutdown)"
+      ],
+      "estimated_time_minutes": 10,
+      "difficulty_level": "beginner",
+      "has_test": true,
+      "test_file": "tests/test_chapter_1.py",
+      "performance_target": {
+        "startup_time_seconds": 3,
+        "execution_time_seconds": 10
+      }
+    }
+  ]
+}
