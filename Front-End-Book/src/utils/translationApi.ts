@@ -1,7 +1,7 @@
 /**
  * T005: Translation API Wrapper
  *
- * Provides translate() function to call backend /v1/translate endpoint
+ * Provides translate() function to call backend /api/v1/translate endpoint
  * with JWT authentication. Includes:
  * - JWT token from AuthContext
  * - Retry logic with exponential backoff
@@ -120,12 +120,12 @@ export async function translate(
     try {
       const startTime = performance.now();
 
-      console.log(`[Translation] Attempt ${attempt}/${maxRetries} - Calling /v1/translate...`, {
+      console.log(`[Translation] Attempt ${attempt}/${maxRetries} - Calling /api/v1/translate...`, {
         contentLength: content.length,
         targetLanguage,
       });
 
-      const response = await fetch(`${API_BASE_URL}/v1/translate`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/translate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
