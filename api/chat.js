@@ -3,24 +3,6 @@
  * Handles chat messages and returns AI responses
  */
 
-const { Pool } = require('pg');
-
-const DATABASE_URL = process.env.DATABASE_URL || '';
-
-let pool = null;
-
-function getPool() {
-  if (!pool) {
-    pool = new Pool({
-      connectionString: DATABASE_URL,
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
-  }
-  return pool;
-}
-
 function getCorsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
