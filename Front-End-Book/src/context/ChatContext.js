@@ -88,11 +88,13 @@ export function ChatProvider({ children }) {
   useEffect(() => {
     const initSession = async () => {
       try {
+        console.log('💬 [ChatProvider] Initializing chat session...');
         // Always create a new session on app load (do not reuse cached sessions)
         // This ensures old chat history doesn't persist across page refreshes
         const session = await createSession();
         const sessionId = session.session_id;
 
+        console.log('💬 [ChatProvider] Session initialized:', sessionId);
         dispatch({ type: ACTIONS.SET_SESSION, payload: sessionId });
 
         // Load conversation history
@@ -107,10 +109,16 @@ export function ChatProvider({ children }) {
           // Continue without history
         }
       } catch (error) {
-        console.error('Failed to initialize chat session:', error.message);
+        console.error('Failed to initialize chat session:', error.message, error);
+
+        // Create a more user-friendly error message
+        const userMessage = error.message || 'Failed to create chat session. Please refresh and try again.';
+        const errorObj = new Error(userMessage);
+        errorObj.status = error.status || 0;
+
         dispatch({
           type: ACTIONS.SET_ERROR,
-          payload: error,
+          payload: errorObj,
         });
       }
     };

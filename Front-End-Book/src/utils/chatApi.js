@@ -228,26 +228,38 @@ export async function fetchConversationHistory(sessionId) {
  */
 export async function createSession() {
   try {
+    console.log('🔌 [createSession] Fetching from:', `${API_BASE_URL}/v1/chat/sessions`);
+
     const response = await fetch(
       `${API_BASE_URL}/v1/chat/sessions`,
       {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         credentials: 'include',
       }
     );
 
+    console.log('🔌 [createSession] Response status:', response.status);
+
     if (!response.ok) {
+      const errorData = await response.text().catch(() => '');
+      console.error('🔌 [createSession] Error response:', errorData);
       throw new ChatAPIError(
-        'Failed to create session',
+        `Failed to create session (${response.status})`,
         response.status,
         null
       );
     }
 
-    return await response.json();
+    const data = await response.json();
+    console.log('🔌 [createSession] Session created:', data.session_id);
+    return data;
   } catch (error) {
+    console.error('🔌 [createSession] Exception:', error);
     if (error instanceof ChatAPIError) throw error;
-    throw new ChatAPIError('Failed to create session', 0, null);
+    throw new ChatAPIError(`Failed to create session: ${error.message}`, 0, null);
   }
 }
 
