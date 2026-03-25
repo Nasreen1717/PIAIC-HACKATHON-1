@@ -99,7 +99,7 @@ async function fetchWithRetry(
  */
 export async function sendChatMessage(request, onChunk) {
   try {
-    console.log('🌐 [sendChatMessage] Sending request to /v1/chat/stream');
+    console.log('🌐 [sendChatMessage] Sending request to /api/v1/chat/stream');
     console.log('🌐 [sendChatMessage] Request has selected_text:', !!request.selected_text);
     if (request.selected_text) {
       console.log('🌐 [sendChatMessage] selected_text length:', request.selected_text.length);
@@ -107,7 +107,7 @@ export async function sendChatMessage(request, onChunk) {
     }
 
     // Use streaming endpoint with NO timeout since data arrives gradually
-    const response = await fetch(`${API_BASE_URL}/v1/chat/stream`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -200,7 +200,7 @@ export async function sendChatMessage(request, onChunk) {
 export async function fetchConversationHistory(sessionId) {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/v1/chat/history/${sessionId}`,
+      `${API_BASE_URL}/api/v1/chat/history/${sessionId}`,
       {
         method: 'GET',
         credentials: 'include',
@@ -228,10 +228,10 @@ export async function fetchConversationHistory(sessionId) {
  */
 export async function createSession() {
   try {
-    console.log('🔌 [createSession] Fetching from:', `${API_BASE_URL}/v1/chat/sessions`);
+    console.log('🔌 [createSession] Fetching from:', `${API_BASE_URL}/api/v1/chat/sessions`);
 
     const response = await fetch(
-      `${API_BASE_URL}/v1/chat/sessions`,
+      `${API_BASE_URL}/api/v1/chat/sessions`,
       {
         method: 'POST',
         headers: {
@@ -270,7 +270,7 @@ export async function createSession() {
 export async function healthCheck() {
   try {
     const response = await fetchWithTimeout(
-      `${API_BASE_URL}/v1/health`,
+      `${API_BASE_URL}/api/v1/health`,
       {
         method: 'GET',
         credentials: 'include',
