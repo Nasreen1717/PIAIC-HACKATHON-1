@@ -132,7 +132,13 @@ async def chat(
 
             except Exception as e:
                 logger.error(f"Vector search failed: {str(e)}")
-                raise HTTPException(status_code=503, detail="Vector search unavailable")
+                # Instead of failing, return a helpful message
+                return ChatResponse(
+                    answer="I'm currently unable to search the textbook for relevant content. Please try: 1) Selecting text from the book and asking about it, 2) Rewording your question, or 3) Try again later. The vector search service is temporarily unavailable.",
+                    citations=[],
+                    confidence_score=0.0,
+                    response_time_ms=time.time() - start_time,
+                )
 
         # **T029**: Handle out-of-scope questions (no relevant chunks)
         # **T029**: Handle out-of-scope questions with fallback search

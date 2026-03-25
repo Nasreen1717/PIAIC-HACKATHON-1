@@ -107,7 +107,7 @@ export async function sendChatMessage(request, onChunk) {
     }
 
     // Use streaming endpoint with NO timeout since data arrives gradually
-    const response = await fetch(`${API_BASE_URL}/api/v1/chat/stream`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/chat/stream/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
