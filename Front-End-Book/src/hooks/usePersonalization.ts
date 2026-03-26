@@ -112,7 +112,7 @@ export const usePersonalization = (): UsePersonalizationResult => {
         };
 
         // Call backend endpoint
-        const response = await fetch(`${API_BASE_URL}/v1/personalize`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/personalize`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
